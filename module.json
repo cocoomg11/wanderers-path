@@ -1,0 +1,37 @@
+{
+  "id": "my-module",
+  "title": "My Module",
+  "description": "One or two sentences on what this module does for the GM. Works with any game system.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "cocoomg11"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "14.369"
+  },
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "socket": true,
+  "styles": [
+    "vendor/wanderers-core/styles/wanderers-ui.css",
+    "styles/my-module.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://github.com/cocoomg11/my-module",
+  "manifest": "https://github.com/cocoomg11/my-module/releases/latest/download/module.json",
+  "download": "https://github.com/cocoomg11/my-module/releases/download/v0.1.0/module.zip",
+  "bugs": "https://github.com/cocoomg11/my-module/issues",
+  "license": "LICENSE",
+  "readme": "README.md",
+  "changelog": "CHANGELOG.md"
+}

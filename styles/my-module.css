@@ -1,0 +1,6 @@
+/* My Module. Windows use .tpl-window plus core's shared look (UI_CLASSES; badges, buttons, tones and the like are core's wc-* classes, see core docs/ui.md); no backdrop blur (it costs a lot of frame rate in Foundry v14). */
+.tpl-window { backdrop-filter: none !important; }
+.tpl-window .window-content { padding: 0; }
+.tpl-window .tpl-scroll { overflow-y: auto; height: 100%; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.tpl-window .tpl-footer { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.5rem; }
+.tpl-window .tpl-footer button { flex: 0 0 auto; }

@@ -1,0 +1,21 @@
+{
+  "name": "my-module",
+  "private": true,
+  "description": "Tests and checks for the My Module Foundry VTT module (the module itself needs no install step).",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "for f in scripts/*.mjs tests/*.mjs $(ls tools/*.mjs 2>/dev/null); do node --check \"$f\" || exit 1; done",
+    "lint": "eslint .",
+    "types": "tsc -p tsconfig.json",
+    "typecheck": "npm run types",
+    "core:verify": "node vendor/wanderers-core/vendor.mjs verify",
+    "ci": "npm run check && npm run lint && npm run types && npm test && npm run core:verify"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "eslint": "10.1.0",
+    "typescript": "6.0.2"
+  }
+}
