@@ -10,8 +10,11 @@
  *         (N = the rank slot whose document is granted; a new slot replaces the previous copy).
  *   src   the UUID the copy was made from; hash = `stableHash` of the source data snapshot (`snapshot`) when it was copied, so a
  *         GM Refresh can tell the source changed.
- * Grants built from templates (`{ built }` rank slots) are left out until the builder ships.
+ * Built rank slots (`{ built: spec }`, builder-model.mjs): `src` = "built:<hash of the spec>" (so another spec replaces the copy),
+ * `hash` = stable hash of the spec, the grant mode and the node's name, image and text (rank-free: a rank change is an update that
+ * rewrites the effect's values, never a new copy). The data is generated, not loaded (`builtSource`).
  */
+import { normalizeSpec, buildTemplate } from "./builder-model.mjs";
 
 /** @typedef {import("./tree-model.mjs").Tree} Tree */
 /** @typedef {import("./picks-model.mjs").Picks} Picks */
@@ -21,6 +24,8 @@
  * @property {"item" | "effect"} mode @property {"scale" | "replace"} perRank @property {string} src source UUID
  * @property {"Item" | "ActiveEffect"} type the embedded document type on the actor
  * @property {boolean} suffix whether the copy's name gets "(rank/max)" (multi-rank "scale" nodes only)
+ * @property {import("./builder-model.mjs").Spec | null} [built] a template spec (built slot), else absent / null
+ * @property {{ name: string, img: string, text: string }} [facts] the node's name, image and text (built slots)
  */
 /** @typedef {{ tree: string, node: string, rank: number, key: string, src: string, hash: string }} Tag */
 /** @typedef {{ id: string, type: "Item" | "ActiveEffect", tag: unknown, name?: string }} Existing a document on the actor */
@@ -49,9 +54,10 @@ export const grantKey = (tree, node, perRank, slot) => (perRank === "replace" ? 
  * document. Pass only the trees whose talents apply now (the character sees them, talents on): ranks in any other tree grant
  * nothing. "scale" uses the first rank slot (one copy, the rank recorded); "replace" uses the slot of the current rank (or the last
  * slot when the node has more ranks than slots).
- * @param {Picks} picks @param {Tree[]} trees @returns {Grant[]}
+ * Built slots grant only with `built` true (Foundry 14 and dnd5e 6: builder-model `builderSupported`).
+ * @param {Picks} picks @param {Tree[]} trees @param {{ built?: boolean }} [o] @returns {Grant[]}
  */
-export function desiredGrants(picks, trees) {
+export function desiredGrants(picks, trees, { built = true } = {}) {
   /** @type {Grant[]} */ const out = [];
   const seen = new Set();
   for (const t of Array.isArray(trees) ? trees : []) {
@@ -63,12 +69,29 @@ export function desiredGrants(picks, trees) {
       if (r < 1 || g.mode === "none" || !g.ranks.length) continue;
       const slot = g.perRank === "replace" ? Math.min(r, g.ranks.length) : 1;
       const s = g.ranks[slot - 1];
-      if (!s || !("uuid" in s)) continue;
-      out.push({ key: grantKey(t.id, n.id, g.perRank, slot), tree: t.id, node: n.id, rank: r, max: n.maxRanks, mode: g.mode, perRank: g.perRank,
-        src: s.uuid, type: g.mode === "item" ? "Item" : "ActiveEffect", suffix: g.perRank === "scale" && n.maxRanks > 1 });
+      if (!s) continue;
+      const base = { key: grantKey(t.id, n.id, g.perRank, slot), tree: t.id, node: n.id, rank: r, max: n.maxRanks, mode: g.mode, perRank: g.perRank,
+        type: /** @type {"Item" | "ActiveEffect"} */ (g.mode === "item" ? "Item" : "ActiveEffect") };
+      if ("uuid" in s) { out.push({ ...base, src: s.uuid, suffix: g.perRank === "scale" && n.maxRanks > 1 }); continue; }
+      if (!built) continue;
+      const spec = normalizeSpec(s.built); if (!spec) continue;
+      // A built copy is named after the node; its values carry the rank, so no "(r/max)".
+      out.push({ ...base, src: `built:${stableHash(spec)}`, suffix: false, built: spec, facts: { name: n.name, img: n.img, text: n.text } });
     }
   }
   return out;
+}
+
+/**
+ * The generated source of a built grant: `{ data, hash }` (data = what `buildTemplate` makes at the grant's rank), or null when
+ * the spec can't be built. Not a loaded document: `inCompendium` false, no advancement.
+ * @param {Grant} g @returns {{ data: Record<string, any>, hash: string } | null}
+ */
+export function builtSource(g) {
+  if (!g.built) return null;
+  const data = buildTemplate(g.built, g.rank, { mode: g.mode === "item" ? "item" : "effect", node: g.facts });
+  if (!data) return null;
+  return { data, hash: stableHash({ spec: g.built, mode: g.mode, facts: g.facts ?? null }) };
 }
 
 /**
@@ -146,7 +169,8 @@ export function hasAdvancement(data) {
 export function copyData(snap, g, { hash, inCompendium, actorUuid }) {
   const d = structuredClone(snap);
   delete d._id;
-  d._stats = { compendiumSource: inCompendium ? g.src : null, duplicateSource: inCompendium ? null : g.src };
+  // A built grant has no source document: both stay null.
+  d._stats = g.built ? { compendiumSource: null, duplicateSource: null } : { compendiumSource: inCompendium ? g.src : null, duplicateSource: inCompendium ? null : g.src };
   d.name = grantName(d.name, g);
   d.flags = isObj(d.flags) ? d.flags : {};
   d.flags["wanderers-path"] = { ...(isObj(d.flags["wanderers-path"]) ? d.flags["wanderers-path"] : {}), granted: tagFor(g, hash) };
@@ -245,6 +269,22 @@ export function grantSummary(desired, existing, o = {}) {
   const tagged = existing.filter(e => readTag(e?.tag));
   const p = reconcilePlan(desired, tagged, { keepTree: o.keepTree });
   return { count: tagged.length, outOfSync: planSize(p), advancement: tagged.filter(e => e.advancement).map(e => String(e.name ?? "")) };
+}
+
+/**
+ * What a rank change rewrites on a built copy (pure; grants.mjs applies it): for an effect, `{ effect: { system.changes,
+ * description } }`; for an item, `{ item: { system.description.value }, effects: [{ _id, system.changes, description }] }` for each of
+ * its effects made by the builder (`flags.wanderers-path.built`). Null when the grant isn't built or can't be built at that rank.
+ * @param {Grant} g @param {{ effects?: { _id: string, flags?: any }[] }} [doc] the copy's data (an item's effects, by id)
+ */
+export function builtRankUpdate(g, doc = {}) {
+  const src = builtSource(g); if (!src) return null;
+  const fx = g.type === "Item" ? src.data.effects?.[0] : src.data;
+  if (!fx) return null;
+  const effect = { "system.changes": fx.system.changes, description: fx.description, [`flags.wanderers-path.built.rank`]: g.rank };
+  if (g.type === "ActiveEffect") return { effect, effects: [] };
+  const ids = (Array.isArray(doc.effects) ? doc.effects : []).filter(e => isObj(e?.flags?.["wanderers-path"]?.built)).map(e => e._id);
+  return { item: { "system.description.value": src.data.system.description.value, [`flags.wanderers-path.built.rank`]: g.rank }, effects: ids.map(_id => ({ _id, ...effect })) };
 }
 
 /** A copy's name for a new rank: its current name without an old "(r/max)" suffix, then `grantName`. @param {string} name @param {Grant} g */

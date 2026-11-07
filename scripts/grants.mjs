@@ -51,6 +51,8 @@ export async function loadSources(grants) {
   /** @type {Map<string, Source>} */ const out = new Map();
   /** @type {Map<string, Set<string>>} */ const byPack = new Map();
   for (const g of grants) {
+    // Built grants are generated, never loaded (their data carries our `built` marker, so no snapshot: it would drop it).
+    if (g.built) { const b = G.builtSource(g); if (b) out.set(G.srcKey(g), { data: b.data, hash: b.hash, inCompendium: false, advancement: false, name: String(b.data.name ?? "") }); continue; }
     const where = G.parseUuid(g.src);
     if (where && "pack" in where) { const s = byPack.get(where.pack) ?? new Set(); s.add(where.id); byPack.set(where.pack, s); }
   }
@@ -62,7 +64,7 @@ export async function loadSources(grants) {
     catch (e) { warn(`couldn't read ${key}`, e); }
   }
   for (const g of grants) {
-    const k = G.srcKey(g); if (out.has(k)) continue;
+    const k = G.srcKey(g); if (out.has(k) || g.built) continue;
     const where = G.parseUuid(g.src); if (!where) continue;
     let doc = null;
     try {
@@ -98,9 +100,16 @@ export async function applyPlan(actor, plan, sources) {
     if (s.advancement) adv.push(s.name);
   }
   const upd = { Item: /** @type {any[]} */ ([]), ActiveEffect: /** @type {any[]} */ ([]) };
+  /** @type {{ item: any, effects: any[] }[]} built items whose own effects get the new rank's values */
+  const itemFx = [];
   for (const u of plan.update) {
     const doc = u.type === "Item" ? actor.items.get(u.id) : actor.effects.get(u.id); if (!doc) continue;
-    upd[u.type].push({ _id: u.id, name: G.rankedName(doc.name, u.grant), [`flags.${ID}.${GRANTED_FLAG}`]: G.tagFor(u.grant, u.hash) });
+    const row = { _id: u.id, name: G.rankedName(doc.name, u.grant), [`flags.${ID}.${GRANTED_FLAG}`]: G.tagFor(u.grant, u.hash) };
+    // A built copy: the rank's values are written into its effect (scale mode), the copy itself stays.
+    const b = u.grant.built ? G.builtRankUpdate(u.grant, { effects: u.type === "Item" ? doc.effects?.map?.((/** @type {any} */ e) => ({ _id: e.id, flags: e.flags })) ?? [] : [] }) : null;
+    if (b?.effect && u.type === "ActiveEffect") Object.assign(row, b.effect);
+    if (b?.item) { Object.assign(row, b.item); if (b.effects.length) itemFx.push({ item: doc, effects: b.effects }); }
+    upd[u.type].push(row);
   }
   let removed = 0, created = 0, updated = 0;
   for (const type of /** @type {const} */ (["Item", "ActiveEffect"])) {
@@ -110,6 +119,7 @@ export async function applyPlan(actor, plan, sources) {
     if (make[type].length) created += (await actor.createEmbeddedDocuments(type, make[type])).length;
     if (upd[type].length) updated += (await actor.updateEmbeddedDocuments(type, upd[type])).length;
   }
+  for (const { item, effects } of itemFx) await item.updateEmbeddedDocuments("ActiveEffect", effects);
   if (removed || created || updated) log(`grants for ${actor.name}: +${created} −${removed} ~${updated}`);
   return { created, removed, updated, advancement: adv };
 }

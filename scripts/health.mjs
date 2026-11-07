@@ -10,10 +10,13 @@ import { F, leader } from "./core.mjs";
 import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
-import { rules, actorFacts, stateOf, grantSummaryOf, send } from "./path.mjs";
+import { rules, actorFacts, stateOf, grantSummaryOf, send, builtOk } from "./path.mjs";
 import { loadTreesChecked } from "./trees.mjs";
 import { hasAdvancement } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
+import * as SheetPage from "./sheet-page.mjs";
+import { pageStatus } from "./sheet-page-model.mjs";
+import { specIssues } from "./builder-model.mjs";
 
 /** Default per-section limit when the caller gives none; the caller's own (e.g. the Satchel's) is clamped to 1 s – 5 min. */
 export const REPORT_TIMEOUT_MS = 20000;
@@ -81,6 +84,9 @@ export async function report({ timeoutMs } = {}) {
       for (const i of issues.slice(0, 10)) add(i.level, i.text);
       if (issues.length > 10) add("warn", `${t.name}: ${issues.length - 10} more issues.`);
       for (const n of t.nodes) {
+        const built = n.grant.ranks.filter(r => "built" in r);
+        if (built.length && !builtOk()) add("warn", `${t.name} › ${n.name} has a built effect, which needs Foundry 14 and dnd5e 6: it grants nothing here.`);
+        for (const r of built) { const i = specIssues(/** @type {any} */ (r).built, { maxRanks: n.maxRanks }); if (i.length) add("bad", `${t.name} › ${n.name}: ${i[0]}`); }
         if (n.grant.mode !== "item") continue;
         if (n.grant.ranks.some(r => "uuid" in r && worldAdvancement(r.uuid))) add("warn", `${t.name} › ${n.name} grants an item with advancement, which doesn't run on talent grants.`);
       }
@@ -104,6 +110,12 @@ export async function report({ timeoutMs } = {}) {
     if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
     if (!ok && packId()) add("warn", "The tree compendium can't be read: granted items are kept as they are until it can.");
     if (!bad) add("ok", list.length ? `${list.length} ${list.length === 1 ? "character has" : "characters have"} talents; nothing to fix.` : "No character has learned talents yet.");
+  });
+  c.section("Toolkit sheet page");
+  c.check(add => {
+    const st = SheetPage.status();
+    const line = pageStatus({ feature: F.on("toolkitPage"), toolkit: st.toolkit, toolkitVersion: st.toolkitVersion, sheet: st.sheet, result: st.result });
+    add(line.level, line.text);
   });
   c.section("Learning");
   c.check(add => {

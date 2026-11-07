@@ -16,7 +16,9 @@ export const F = createFeatures(ID, [
   { id: "talents", label: "Talents", hint: "Talent trees for characters: the talent window, learning and refunds." },
   { id: "sheetButton", label: "Character sheet button", hint: "A Talents button in the character sheet's header menu.", needs: ["talents"] },
   { id: "keybindings", label: "Key binding", hint: "An Open talents action in Configure Controls (no key assigned by default).", needs: ["talents"] },
-  { id: "moduleHooks", label: "Hooks for other modules", hint: "Fires wanderers-path.learned and wanderers-path.respec after talents change (ids only).", needs: ["talents"] }
+  { id: "moduleHooks", label: "Hooks for other modules", hint: "Fires wanderers-path.learned and wanderers-path.respec after talents change (ids only).", needs: ["talents"] },
+  { id: "toolkitPage", label: "Toolkit sheet page", hint: "A Talents page (bookmark) on Wanderer's Toolkit's character sheet, when the toolkit (2.3.0 or later) is active with its sheet on. The talent window stays.", needs: ["talents"] },
+  { id: "builder", label: "Feature builder", hint: "Build a talent's effect from plain-language templates (AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points, critical range). Needs Foundry 14 and dnd5e 6.", needs: ["talents"] }
 ], { title: TITLE });
 
 /** Points one setting change re-reads: open windows and the tree cache listen through this. */

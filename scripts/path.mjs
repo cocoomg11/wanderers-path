@@ -13,8 +13,15 @@ import { NOTICE_HOOK, readNotice, pendingFrom } from "./requests-model.mjs";
 import { loadTrees, loadTreesChecked } from "./trees.mjs";
 import * as G from "./grants-model.mjs";
 import * as Grants from "./grants.mjs";
+import { builderSupported } from "./builder-model.mjs";
 
 /** @typedef {import("./picks-model.mjs").Picks} Picks */
+
+/** Whether built (template) grants can run in this world: Foundry 14 and dnd5e 6. */
+export const builtOk = () => builderSupported({ generation: game.release?.generation, system: game.system?.id, systemVersion: game.system?.version });
+
+/** What the character should be granted now. @param {Awaited<ReturnType<typeof stateOf>>} st */
+export const desiredOf = st => G.desiredGrants(st.picks, G.grantTrees(st.seen), { built: builtOk() });
 
 /** The world rules from the settings. */
 export const rules = () => P.readRules({
@@ -44,7 +51,7 @@ export function actorFacts(actor) {
  * @param {any} actor @param {Awaited<ReturnType<typeof stateOf>>} st @param {boolean} [treesOk]
  */
 export function grantSummaryOf(actor, st, treesOk = true) {
-  try { return G.grantSummary(G.desiredGrants(st.picks, G.grantTrees(st.seen)), Grants.existingOf(actor), { keepTree: () => !treesOk }); }
+  try { return G.grantSummary(desiredOf(st), Grants.existingOf(actor), { keepTree: () => !treesOk }); }
   catch (e) { warn("grant summary", e); return { count: 0, outOfSync: 0, advancement: [] }; }
 }
 
@@ -120,7 +127,7 @@ async function syncGrants(actor, { refresh = false, to } = {}) {
     // With the trees unknown nothing can be judged: granted documents stay as they are until the compendium reads again.
     if (!ok) { log(`grants for ${actor.name}: skipped, the tree compendium can't be read`); return null; }
     const st = await stateOf(actor);
-    const r = await Grants.reconcile(actor, G.desiredGrants(st.picks, G.grantTrees(st.seen)), { refresh });
+    const r = await Grants.reconcile(actor, desiredOf(st), { refresh });
     const gm = to && game.users?.get(to)?.isGM ? to : null;
     if (gm && r.plan.missing.length) notify(gm, `${actor.name}: ${r.plan.missing.length} granted ${r.plan.missing.length === 1 ? "document wasn't" : "documents weren't"} found (see the health check).`, "warn");
     if (gm && r.result.advancement.length) notify(gm, `${actor.name}: ${r.result.advancement.join(", ")} ${r.result.advancement.length === 1 ? "has" : "have"} advancement, which doesn't run on talent grants.`, "warn");

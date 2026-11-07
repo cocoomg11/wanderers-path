@@ -8,8 +8,8 @@ import * as Cleanup from "../scripts/cleanup.mjs";
 const src = (/** @type {string} */ p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const scripts = readdirSync(new URL("../scripts/", import.meta.url)).filter(f => f.endsWith(".mjs"));
 
-test("features, settings and hooks (0.2.0)", () => {
-  assert.deepEqual(F.FEATURES.map(f => f.id), ["talents", "sheetButton", "keybindings", "moduleHooks"]);
+test("features, settings and hooks (0.3.0)", () => {
+  assert.deepEqual(F.FEATURES.map(f => f.id), ["talents", "sheetButton", "keybindings", "moduleHooks", "toolkitPage", "builder"]);
   for (const f of F.FEATURES.slice(1)) assert.deepEqual(f.needs, ["talents"]);
   const keys = S.ROWS.map(r => r.key);
   for (const k of ["treePack", "enabledForAll", "unlockLevel", "pointsFromLevel", "pointsPerLevel", "playerRespec", "debugLog"]) assert.ok(keys.includes(k), k);
@@ -43,9 +43,11 @@ test("every window carries core's UI_CLASSES and wp-window; no literal revision"
 test("css: every rule scoped to our windows or our tooltip, no backdrop blur", () => {
   const css = src("styles/wanderers-path.css").replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media[^{]*\{([\s\S]*?\})\s*\}/g, "$1");
   for (const rule of css.split("}").map(r => r.split("{")[0].trim()).filter(Boolean)) {
-    for (const sel of rule.split(",")) assert.match(sel.trim(), /^(\.wp-window|\.wp-path-window|#tooltip\.wp-tip|\.locked-tooltip\.wp-tip)\b/, sel);
+    for (const sel of rule.split(",")) assert.match(sel.trim(), /^(\.wp-window|\.wp-path-window|\.wp-builder-window|\.wp-page|#tooltip\.wp-tip|\.locked-tooltip\.wp-tip)\b/, sel);
   }
   assert.match(css, /backdrop-filter: none/);
+  // The sheet page sits in the toolkit's dark sheet in both themes: no theme selectors there.
+  assert.doesNotMatch(css, /theme-(light|dark)[^{]*\.wp-page/);
 });
 
 // CLAUDE.md is left out: its own rule names the words to avoid.
@@ -80,7 +82,13 @@ test("leader writes only: picks are written in one place, after the leader check
   const p = src("scripts/path.mjs");
   assert.equal((p.match(/actor\.update\(/g) ?? []).length, 1);
   assert.match(p, /async function writePicks[\s\S]*?if \(!leader\.isLeader\(\)\) throw/);
-  for (const f of scripts.filter(f => f !== "path.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /\.update\(\{|setFlag\(/, f);
+  for (const f of scripts.filter(f => f !== "path.mjs" && f !== "builder.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /\.update\(\{|setFlag\(/, f);
+  // The builder window is the GM editing their own tree: one write, of the tree flag on the tree's JournalEntry, GM only.
+  const b = src("scripts/builder.mjs");
+  assert.equal((b.match(/\.update\(\{/g) ?? []).length, 1);
+  assert.match(b, /await doc\.update\(\{ \[`flags\.\$\{ID\}\.\$\{TREE_FLAG\}`\]: r\.tree \}\)/);
+  assert.match(b, /static async #onSave\(\) \{[\s\S]*?if \(!game\.user\?\.isGM/);
+  assert.doesNotMatch(b, /setFlag\(|PICKS_FLAG|EmbeddedDocuments/);
   assert.match(p, /if \(!user\.isGM && !st\.rules\.playerRespec\)/, "players refund only with player respec on");
   assert.match(p, /testUserPermission\(user, "OWNER"\)/);
   assert.match(p, /if \(!F\.on\("moduleHooks"\)\) return;/);

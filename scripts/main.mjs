@@ -14,6 +14,9 @@ import * as Cleanup from "./cleanup.mjs";
 import * as Win from "./window.mjs";
 import * as SetWin from "./settings-window.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
+import * as SheetPage from "./sheet-page.mjs";
+import * as Builder from "./builder.mjs";
+import { templateList, preview } from "./builder-model.mjs";
 
 let isReady = false;
 
@@ -50,7 +53,19 @@ export const API = {
   /** Remove module data (GM): plan(), dryRun(), remove(pick, "REMOVE"). */
   cleanup: { plan: () => Cleanup.plan(), dryRun: () => Cleanup.dryRunRows(), remove: (/** @type {Record<string, boolean>} */ pick, /** @type {string} */ word) => Cleanup.remove(pick, word) },
   /** Opens the GM's Settings window (rules, health, Remove data). */
-  settings: () => SetWin.openSettings()
+  settings: () => SetWin.openSettings(),
+  /**
+   * The feature builder (part A): `templates()` (every template, plain data), `preview(spec, rank?, maxRanks?)` ({ ok, issues, text,
+   * line, changes, spec }), `open()` (GM: the Build a talent effect window). Undefined when the feature is off.
+   */
+  get builder() {
+    if (!F.on("builder")) return undefined;
+    return Object.freeze({
+      templates: () => templateList(),
+      preview: (/** @type {unknown} */ spec, /** @type {number} */ rank = 1, /** @type {number | undefined} */ maxRanks) => clone(preview(spec, rank, maxRanks)),
+      open: () => Builder.openBuilder()
+    });
+  }
 };
 
 Hooks.once("init", () => {
@@ -73,6 +88,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   if (F.on("talents")) { Path.registerHandlers(); Path.start(); }
+  if (F.on("toolkitPage")) SheetPage.ready();
   isReady = true;
   // Optional: show up in the Wanderer's Satchel hub when it is installed.
   const reg = registration({

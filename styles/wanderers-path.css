@@ -87,3 +87,33 @@
 #tooltip.wp-tip .wp-tip-req, .locked-tooltip.wp-tip .wp-tip-req { color: #e0645a; font-size: 12px; }
 #tooltip.wp-tip .wp-tip-nxt, .locked-tooltip.wp-tip .wp-tip-nxt { color: #9ab; font-size: 12px; margin-top: 4px; }
 #tooltip.wp-tip .wp-tip-hint, .locked-tooltip.wp-tip .wp-tip-hint { color: #3fd23f; font-size: 12px; margin-top: 6px; }
+
+/* Toolkit sheet page (0.3.0): inside the toolkit's dark sheet; core's --wc-* tokens; no theme selectors. */
+.wp-page { --wp-gold: #f0c75e; --wp-edge: #5a4a38; --wp-ok: #3fd23f; --wp-muted: #8d8170; display: flex; flex-direction: column; gap: 8px; }
+.wp-page .wp-page-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.wp-page .wp-pill { white-space: nowrap; background: rgba(0,0,0,.35); border: 1px solid var(--wp-edge); padding: 3px 10px; border-radius: 12px; font-size: 13px; }
+.wp-page .wp-pill b, .wp-page .wp-list b { color: var(--wp-gold); }
+.wp-page .wp-page-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.wp-page .wp-box { background: rgba(0,0,0,.25); border: 1px solid var(--wp-edge); border-radius: 4px; padding: 8px; min-width: 0; }
+.wp-page .wp-box h3 { margin: 0 0 6px; font-size: 14px; border: 0; }
+.wp-page .wp-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.wp-page .wp-list li { margin: 3px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.wp-page .wp-active li, .wp-page .wp-log li { flex-wrap: wrap; justify-content: flex-start; }
+.wp-page .wp-list small { color: var(--wp-muted); }
+.wp-page .wp-page-tree { all: unset; cursor: pointer; text-decoration: underline dotted; }
+.wp-page .wp-page-tree.wp-on { color: var(--wp-gold); text-decoration: none; }
+.wp-page .wp-page-tree:focus-visible { outline: 1px solid var(--wp-gold); }
+.wp-page .wp-mini { position: relative; margin: 4px auto; }
+.wp-page .wp-mini-n { position: absolute; width: 14px; height: 14px; border-radius: 3px; border: 1px solid #555; background: #1a1612; }
+.wp-page .wp-mini-n.wp-locked { opacity: .45; }
+.wp-page .wp-mini-n.wp-available { border-color: var(--wp-ok); }
+.wp-page .wp-mini-n.wp-partial { border-color: var(--wp-ok); background: rgba(63,210,63,.45); }
+.wp-page .wp-mini-n.wp-maxed { border-color: var(--wp-gold); background: var(--wp-gold); }
+
+/* Build a talent effect (0.3.0) */
+.wp-builder-window .wp-build { display: flex; flex-direction: column; gap: 8px; }
+.wp-builder-window .wp-row { display: flex; gap: 8px; }
+.wp-builder-window .wp-row > * { flex: 1; }
+.wp-builder-window .wp-preview h3 { margin: 0 0 4px; font-size: 14px; border: 0; }
+.wp-builder-window .wp-preview p { margin: 0; font-weight: bold; }
+.wp-builder-window .wp-warn { color: var(--wc-warn, #e0a030); }

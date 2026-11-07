@@ -2,6 +2,31 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.3.0
+
+A Talents page on Wanderer's Toolkit's character sheet, and part A of the feature builder: talents can now grant effects built from plain-language templates, whose values scale with the rank.
+
+- **Toolkit sheet page** (feature *Toolkit sheet page*, Wanderer's Toolkit 2.3.0+ with its character sheet on; still a `recommends`): page `wanderers-path.talents`, *Talents*, between Reputation and Bastion (order 77), shown for characters with talents on and a tree assigned. It shows points available and spent, points per tree (click a tree to preview it), a small preview of the tree (learned, open and locked talents), *Active from talents* (built effects read as "+2 AC"), the five latest log lines and *Open full window*. Registered on `wayfarers-toolkit.sheetReady`, or at our ready when the toolkit's `api.sheet` is already there; registered again (a replace) when the trees change so the bookmark follows. Health: one line for the page.
+- **Feature builder, part A** (feature *Feature builder*): a rank slot can hold `{ built: { template, params, base, step } }` instead of a UUID. X = base + step × (rank − 1). Templates: Armor Class bonus, speed bonus by kind, darkvision and other senses (range upgrade), bonus to a skill / an ability's checks or saves / all skills, checks or saves / initiative, advantage (an ability's saves or checks, a skill, initiative), proficiency or expertise (skills, saving throws, tools, weapons, armor, languages), resistance / immunity / vulnerability to a damage type and condition immunity, ability score bonus, extra hit points (per level or in total), wider weapon critical range. Each has a validator and a preview line ("+X AC per rank: 1 / 2 / 3"). Every key was checked against dnd5e 6.0.6's data models (no legacy keys dnd5e shims); changes use Foundry 14's `{ key, type, value, phase: "initial" }` in `system.changes`.
+- **Grant engine:** built slots grant a tagged Active Effect (grant mode "effect") or a feat item carrying one transfer effect (mode "item"), named after the talent. `src` = `built:<hash of the spec>` (another spec replaces the copy); a rank change in "scale" mode rewrites the effect's values in place (same copy); Refresh re-builds a copy whose talent name, image or text changed. Built grants need Foundry 14 and dnd5e 6; elsewhere they grant nothing (health says so).
+- **Build a talent effect** (GM; Settings window, `api.builder.open()`): until the tree editor exists, this writes a built spec into a node's rank slot in the tree compendium (the tree's `flags.wanderers-path.tree`).
+- API: `builder.templates()`, `builder.preview(spec, rank, maxRanks)`, `builder.open()`. Health: built specs that don't validate, built talents in a world that can't run them.
+
+### Untested in Foundry
+
+- [ ] Toolkit 2.3+ active, sheet on: a character with an assigned tree shows the Talents bookmark after Reputation; one without a tree (or with talents off) doesn't; publishing or assigning a tree makes it appear without a reload.
+- [ ] The page draws inside the toolkit's dark sheet in light and dark Foundry themes; the mini tree matches the window's learned / open / locked states; tooltips on the mini cells show name and rank.
+- [ ] Clicking a tree name on the page switches the preview; *Open full window* opens our window; nothing on the page triggers the toolkit's own `data-action` buttons; Enter does nothing odd.
+- [ ] Learn in the window: the page's points, active list and log update (the toolkit redraws on the actor change).
+- [ ] Toolkit missing / inactive / sheet off: no errors; health shows the info line. The toolkit loading after us: registered on `sheetReady`.
+- [ ] Settings › Build a talent effect: pick tree, talent, slot, mode, template; the preview and the fields follow each change; Save writes the slot (check the journal flag) and is disabled for an invalid spec or a locked compendium.
+- [ ] A built "+X AC" effect (scale, 3 ranks, X 1/2/3): Learn rank 1 → effect "Talent name" on the actor, AC +1; rank 2 → same effect id, AC +2; refund → effect gone.
+- [ ] Each template live on a dnd5e 6.0.6 character: speed (walk and fly), darkvision upgrade (a longer racial range stays), skill / check / save / all-skills / initiative bonus shows in the roll, advantage on a save / skill / initiative (roll dialog defaults to advantage), skill expertise and save / tool proficiency, weapon / armor / language trait added, resistance / immunity / vulnerability / condition immunity on the sheet, ability score +X, HP per level and overall, crit on 19–20 for weapon attacks.
+- [ ] Item mode: a feat "Talent name" with the description and one transfer effect; a rank change updates the item's effect values and description.
+- [ ] Changing a built slot's template after characters learned it: the next reconcile replaces the copy.
+- [ ] Health: an invalid built spec (edit the flag by hand) shows a "bad" line; on a v13 world the built talent shows the "needs Foundry 14" warning and grants nothing.
+- [ ] `api.builder.templates()`, `api.builder.preview({ template: "ac", base: 1, step: 1 }, 2)`; with *Feature builder* off `api.builder` is undefined and the Settings section is gone.
+
 ## 0.2.0
 
 The grant engine: learned talents now give the character what their node grants (items or effects from your own compendiums or world), and refunds take it back. Nothing new in the window for players; the GM box gains the granted items' state and a Refresh button.

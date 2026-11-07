@@ -9,6 +9,7 @@ import { ID, TITLE } from "./const.mjs";
 import { F, S } from "./core.mjs";
 import * as Health from "./health.mjs";
 import * as Cleanup from "./cleanup.mjs";
+import { openBuilder } from "./builder.mjs";
 
 const { ApplicationV2 } = foundry.applications.api;
 /** @type {SettingsWindow | null} */
@@ -23,7 +24,7 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     classes: ["wp-window", "wp-settings-window", ...UI_CLASSES],
     window: { title: `${TITLE} · Settings`, icon: "fa-solid fa-route", resizable: true },
     position: { width: 560, height: 640 },
-    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove }
+    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove, builder: () => { openBuilder(); } }
   };
   /** @type {any[] | null} */ report = null;
 
@@ -45,6 +46,8 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     const rows = Cleanup.dryRunRows();
     div.innerHTML = `<section class="wc-panel"><div class="wc-panel-head"><h3>Rules</h3></div><div class="wc-panel-body">${basic.length ? basic.map(row).join("") : `<p class="wc-hint">Talents are turned off (Features).</p>`}
         <div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="save"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save</button></div></div></section>
+      ${F.on("builder") ? `<section class="wc-panel"><div class="wc-panel-head"><h3>Feature builder</h3></div><div class="wc-panel-body"><p class="wc-hint">Give a published talent a built effect: AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points or critical range, scaling with its rank.</p>
+        <div class="wc-row"><button type="button" class="wc-btn" data-action="builder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Build a talent effect</button></div></div></section>` : ""}
       <section class="wc-panel"><div class="wc-panel-head"><h3>Health check</h3></div><div class="wc-panel-body">${this.report ? this.report.map(s => `<h4>${esc(s.title)}</h4>${statusLines(s.lines)}`).join("") || `<p class="wc-hint">Nothing to report.</p>` : `<p class="wc-hint">Not run yet.</p>`}
         <div class="wc-row"><button type="button" class="wc-btn" data-action="health"><i class="fa-solid fa-stethoscope" aria-hidden="true"></i> ${this.report ? "Run again" : "Run check"}</button></div></div></section>
       <section class="wc-panel"><div class="wc-panel-head"><h3>Remove Wanderer's Path data</h3></div><div class="wc-panel-body">

@@ -21,6 +21,10 @@ export const packId = () => String(S.get("treePack") ?? "").trim();
 /** The chosen pack, or null. */
 export const pack = () => { const id = packId(); return id ? game.packs?.get(id) ?? null : null; };
 
+/** The trees of the last finished read (synchronous; [] before the first). For checks that can't wait, such as a page's visible(). @type {Tree[]} */
+let last = [];
+export const cachedTrees = () => last;
+
 /** Forgets the cache and tells open windows. */
 export function invalidate() {
   cache = null;
@@ -52,6 +56,7 @@ export function loadTrees() {
       out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
       log(`trees: ${out.length} loaded from ${p.collection}`);
       readOk = true;
+      last = out;
       return out;
     } catch (e) { warn("couldn't read the tree compendium", e); cache = null; return []; }
   })();

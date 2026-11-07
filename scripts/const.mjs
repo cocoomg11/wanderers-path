@@ -12,3 +12,5 @@ export const HOOKS = { ready: `${ID}.ready`, learned: `${ID}.learned`, respec: `
 export const PICKS_FLAG = "picks";
 /** Where a published tree is stored on its JournalEntry: `flags.wanderers-path.tree`. */
 export const TREE_FLAG = "tree";
+/** Wanderer's Toolkit (recommends only): its sheet takes our Talents page. */
+export const TOOLKIT_ID = "wayfarers-toolkit";
