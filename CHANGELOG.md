@@ -2,6 +2,26 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.4.1
+
+Fixes from the live test of 0.4.0.
+
+- **Health fixes wait for the result:** *Refresh granted items* and *Refund orphans* (Satchel Fix buttons) now finish only after the GM client has reconciled every character (the leader answers with an internal `wanderers-path.done` hook carrying the request's ticket; after 30 s the fix resolves anyway and says the GM client hasn't answered yet). The Satchel's re-check then shows the new state instead of the old one. Works whether the clicking GM tab is the one that applies changes or not.
+- **Health:** with no tree compendium chosen and granted items still on characters, an info line says the granted items are kept as they are until one is.
+- **Tier rows:** a tree without an explicit `tiers` count now shows only as many rows as its talents use (highest tier + 1) instead of six; an explicit `tiers` is kept as given. Progress says *All tiers open.* once the last tier opens, never "Next tier opens at …" for a tier that doesn't exist.
+- **API:** `cleanup.plan()` and `cleanup.dryRun()` are GM only, like `remove` (players get a "GM only" warning and null).
+- **Players:** a GM-only request (award, enable, trees, refresh, orphans) sent from a player's client is refused right there with a "GM only" notice instead of being sent and refused silently.
+
+### Untested in Foundry
+
+- [ ] Delete a granted effect, Satchel › Wanderer's Path › Refresh granted items › confirm: the re-checked report shows everything in step without clicking Run again. Same from a second GM tab that isn't the leader.
+- [ ] Refund orphans from the Satchel (unpublish a tree first): the re-check shows no orphan line.
+- [ ] With the GM client that leads closed mid-request (or a hung leader): the fix resolves after about 30 s with the "hasn't answered yet" message.
+- [ ] Set `treePack` to "" with granted items on a character: health › Characters shows the "granted items are kept" info line; nothing is removed.
+- [ ] A tree with `tiered.tierSize: 3`, talents up to tier 2 and no `tiers`: three rows (0/3/6 pts); after 6 points in it, Progress says "All tiers open." and the bar is full. A tree with `tiers: 6` still draws six rows. The toolkit sheet page's mini tree has the same rows.
+- [ ] Player console: `api.cleanup.plan()` and `api.cleanup.dryRun()` warn "GM only" and return null; GM unchanged.
+- [ ] Player console: `api.refresh` (already GM only) and a hand-sent `pathAward` via the window's code path show "GM only" and send nothing.
+
 ## 0.4.0
 
 Part B of the feature builder: extra damage dice, uses per rest, granted spells, and talents described in their own text with an optional external automation key.

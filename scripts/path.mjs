@@ -9,7 +9,7 @@ import { storeDeletions, deletionKeys } from "../vendor/wanderers-core/index.mjs
 import { ID, TITLE, HOOKS, PICKS_FLAG } from "./const.mjs";
 import { F, S, leader, log, warn } from "./core.mjs";
 import * as P from "./picks-model.mjs";
-import { NOTICE_HOOK, readNotice, pendingFrom } from "./requests-model.mjs";
+import { NOTICE_HOOK, DONE_HOOK, readNotice, readDone, maySend, pendingFrom } from "./requests-model.mjs";
 import { loadTrees, loadTreesChecked } from "./trees.mjs";
 import * as G from "./grants-model.mjs";
 import * as Grants from "./grants.mjs";
@@ -275,8 +275,15 @@ export function registerHandlers() {
   leader.handle("pathAward", one(onAward));
   leader.handle("pathEnable", one(onEnable));
   leader.handle("pathTrees", one(onTrees));
-  leader.handle("pathRefresh", onRefresh);
-  leader.handle("pathOrphans", onOrphans);
+  /**
+   * GM-wide requests answer a ticket with DONE_HOOK once every character's reconcile has finished (also after a refusal), so the
+   * sender's `sendAndWait` (a health fix) resolves only then. @param {(data: any, user: any) => Promise<unknown>} fn
+   */
+  const answered = fn => async (/** @type {any} */ data, /** @type {any} */ user) => {
+    try { await fn(data, user); } finally { if (readDone(data)) { try { leader.broadcastHook(DONE_HOOK, { ticket: data.ticket }); } catch (e) { warn("done", e); } } }
+  };
+  leader.handle("pathRefresh", answered(onRefresh));
+  leader.handle("pathOrphans", answered(onOrphans));
 }
 
 /**
@@ -284,9 +291,33 @@ export function registerHandlers() {
  * @param {"pathLearn" | "pathRefund" | "pathAward" | "pathEnable" | "pathTrees" | "pathRefresh" | "pathOrphans"} kind @param {Record<string, unknown>} data
  */
 export function send(kind, data) {
+  // GM-only kinds: a player is told here (the leader would refuse them without a word).
+  if (!maySend(kind, !!game.user?.isGM)) { ui.notifications.warn(`${TITLE}: GM only.`); return false; }
   const ok = leader.request(kind, data);
   if (!ok) ui.notifications.warn(`${TITLE}: ${leader.activeGM() ? "that request couldn't be sent." : "a GM must be connected to change talents."}`);
   return ok;
+}
+
+/** How long `sendAndWait` waits for the leader's answer before resolving anyway. */
+export const WAIT_MS = 30000;
+
+/**
+ * Sends a GM-wide request with a ticket and resolves once the leader says it is done (DONE_HOOK with the same ticket, fired after
+ * every reconcile), or after `timeoutMs`. Works whether this client is the leader or not (the hook fires here either way). Resolves
+ * false when the request couldn't be sent, true when answered, "timeout" when the wait ran out.
+ * @param {"pathRefresh" | "pathOrphans"} kind @param {Record<string, unknown>} data @param {number} [timeoutMs]
+ * @returns {Promise<boolean | "timeout">}
+ */
+export function sendAndWait(kind, data, timeoutMs = WAIT_MS) {
+  const ticket = foundry.utils.randomID(16);
+  return new Promise(resolve => {
+    /** @type {any} */ let timer = null;
+    const off = () => { Hooks.off(DONE_HOOK, on); if (timer) clearTimeout(timer); };
+    const on = (/** @type {unknown} */ payload) => { if (readDone(payload) !== ticket) return; off(); resolve(true); };
+    Hooks.on(DONE_HOOK, on);
+    timer = setTimeout(() => { off(); log(`${kind}: no answer after ${timeoutMs} ms`); resolve("timeout"); }, timeoutMs);
+    if (!send(kind, { ...data, ticket })) { off(); resolve(false); }
+  });
 }
 
 /** Whether a GM is connected (learning needs one). */

@@ -154,7 +154,8 @@ function clean(raw) {
   t.assign = { classes: idents(as.classes), subclasses: idents(as.subclasses) };
   const ul = clampInt(raw.unlockLevel, 0, MAX_LEVEL, 0); t.unlockLevel = ul > 0 ? ul : null;
   const ti = isObj(raw.tiered) ? raw.tiered : {};
-  t.tiered = { columns: clampInt(ti.columns, 1, 7, 3), tierSize: clampInt(ti.tierSize, 1, 50, 5), tiers: clampInt(ti.tiers, 1, 20, 6) };
+  // No explicit `tiers`: as many rows as the nodes use (fixRefs raises it to the highest tier + 1). Explicit tiers are kept as given.
+  t.tiered = { columns: clampInt(ti.columns, 1, 7, 3), tierSize: clampInt(ti.tierSize, 1, 50, 5), tiers: clampInt(ti.tiers, 1, 20, 1) };
   const bo = isObj(raw.board) ? raw.board : {};
   t.board = { hub: nodeId(bo.hub), edges: Array.isArray(bo.edges) ? bo.edges.slice(0, MAX_EDGES * 2) : [] };
   const seen = new Set();

@@ -7,7 +7,7 @@ import { createFeatures, createSettings, createLogger, createLeader } from "../v
 import { createAutomationRegistry } from "./automation-model.mjs";
 import { records } from "../vendor/wanderers-core/index.mjs";
 import { TITLE, ID, HOOKS } from "./const.mjs";
-import { REQUESTS, NOTICE_HOOK } from "./requests-model.mjs";
+import { REQUESTS, NOTICE_HOOK, DONE_HOOK } from "./requests-model.mjs";
 
 /**
  * Features: one world setting per tool (`feature-<id>`, reload). A turned-off tool registers nothing (no hooks, buttons, key
@@ -44,8 +44,8 @@ export const RECORDS = records(S.ROWS);
 
 export const { log, warn } = createLogger(ID);
 
-/** The one writer. Hook names it may broadcast: notices and our public hooks. */
-export const leader = createLeader({ id: ID, log, requests: REQUESTS, hooks: [NOTICE_HOOK, HOOKS.learned, HOOKS.respec] });
+/** The one writer. Hook names it may broadcast: notices, the done signal and our public hooks. */
+export const leader = createLeader({ id: ID, log, requests: REQUESTS, hooks: [NOTICE_HOOK, DONE_HOOK, HOOKS.learned, HOOKS.respec] });
 
 /** External automation handlers (`api.registerAutomation`): stored, never invoked in this version (automation-model.mjs). */
 export const AUTOMATIONS = createAutomationRegistry();

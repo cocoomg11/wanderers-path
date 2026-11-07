@@ -22,6 +22,12 @@ let isReady = false;
 
 const clone = (/** @type {unknown} */ v) => structuredClone(v);
 
+/** GM-only API calls: players get a warning and null. @template T @param {() => T} fn @returns {T | null} */
+function gmOnly(fn) {
+  if (!game.user?.isGM) { ui.notifications.warn(`${TITLE}: GM only.`); return null; }
+  return fn();
+}
+
 export const API = {
   get version() { return game.modules.get(ID)?.version; },
   get isReady() { return isReady; },
@@ -50,8 +56,8 @@ export const API = {
   },
   /** Read-only health report: [{ title, lines: [{ level, text }] }] (GM; players get []). */
   healthReport: (/** @type {{ timeoutMs?: number }} */ opts = {}) => Health.report(opts),
-  /** Remove module data (GM): plan(), dryRun(), remove(pick, "REMOVE"). */
-  cleanup: { plan: () => Cleanup.plan(), dryRun: () => Cleanup.dryRunRows(), remove: (/** @type {Record<string, boolean>} */ pick, /** @type {string} */ word) => Cleanup.remove(pick, word) },
+  /** Remove module data (GM; players get a warning and null): plan(), dryRun(), remove(pick, "REMOVE"). */
+  cleanup: { plan: () => gmOnly(() => Cleanup.plan()), dryRun: () => gmOnly(() => Cleanup.dryRunRows()), remove: (/** @type {Record<string, boolean>} */ pick, /** @type {string} */ word) => Cleanup.remove(pick, word) },
   /** Opens the GM's Settings window (rules, health, Remove data). */
   settings: () => SetWin.openSettings(),
   /**

@@ -2,7 +2,7 @@
 
 Foundry VTT module (v13 minimum, verified v14 build 370; dnd5e): customizable talent trees and spec boards. The GM sets up a base board, its nodes and what they grant; each character has their own board and spends points on it. Logic only: the module ships with **no talent content**; boards and their contents live in the user's own world (a private world compendium). Public repo, MIT.
 
-Status: 0.4.0 (slices 2–4 and 6–8 of the build plan: pure models, tree loader, 1A player window, learn / refund requests, grant engine, health, cleanup, Satchel registration, toolkit sheet page, builder parts A and B). Next: slice 5 (GM editor, needs the user's OK), 9 (board, needs the user's OK), 10 (polish). A build plan is written separately; follow it.
+Status: 0.4.1 (slices 2–4 and 6–8 of the build plan: pure models, tree loader, 1A player window, learn / refund requests, grant engine, health, cleanup, Satchel registration, toolkit sheet page, builder parts A and B). Next: slice 5 (GM editor, needs the user's OK), 9 (board, needs the user's OK), 10 (polish). A build plan is written separately; follow it.
 
 ## File map
 - `scripts/main.mjs` entry: features and settings (`init`), the API (`game.modules.get("wanderers-path").api`, set in `init`), the tool's hooks, sheet header control, key binding `path`, leader handlers (`ready`), Wanderer's Satchel registration, hook `wanderers-path.ready`. Everything is gated by `F.on(...)`.
@@ -44,6 +44,14 @@ Status: 0.4.0 (slices 2–4 and 6–8 of the build plan: pure models, tree loade
 - Activity ids: `activityId(grantKey)` (FNV-style hash, `wp` + 14 base-36 chars) so ids are equal across ranks and rebuilds; `builtSource` passes `key: g.key`. `builtRankUpdate` for items writes `system.uses.max` and `system.activities.<id>` (without `_id`/`type`), never `spent`; items with no builder effect (item-only templates) get no effect updates.
 - `api.registerAutomation(key, handler)` → `AUTOMATIONS` (core.mjs): stored, never invoked (no call shape decided). Health section "Automation" (info lines only). The node's `automation` is set by `withBuiltSlot` for `describe` (same key keeps `data`).
 - Spell picker (builder.mjs `lookupSpell`): world `game.items.get(id)` or `pack.getIndex()` → `.get(id)`, type must be "spell"; Save re-checks. No `fromUuid`.
+
+## 0.4.1 notes (live-test fixes)
+- **Fix waits:** health `FIXES.refresh/orphans.run` = `runAndWait` → `path.mjs` `sendAndWait(kind, data, WAIT_MS 30 s)`: a random `ticket` (`TICKET_RE`) in the `pathRefresh` / `pathOrphans` request; the leader's handlers are wrapped in `answered()`, which broadcasts `DONE_HOOK` (`wanderers-path.done`, `{ ticket }`, listed in the leader's `hooks`) in a `finally` after the handler (refusals too). The sender listens on `Hooks` (fires locally when it is the leader too); timeout resolves "timeout" (message, not false). Never return `send(...)` from a fix again (test).
+- **Local refusal:** `send()` checks `maySend(kind, isGM)` (requests-model: `from: "gm"` kinds refuse players) and warns "GM only" before sending.
+- **Tiers:** `clean` defaults `tiered.tiers` to 1 when not given, `fixRefs` raises it to the highest node tier + 1; explicit `tiers` kept (still raised to hold every node). Progress text "All tiers open." when `next` is null.
+- **Health:** "granted items are kept" info line also when `treePack` is unset and characters carry granted docs.
+- **API:** `cleanup.plan()` / `dryRun()` go through main.mjs `gmOnly()` (players: warning + null).
+- Tests: `tests/v041.test.mjs`.
 
 ## Key patterns to follow
 - **Core conventions:** read core's CONVENTIONS.md and STABILITY.md (https://github.com/cocoomg11/wanderers-core). Copy patterns from Wanderer's Toolkit (`cocoomg11/wayfarers-toolkit`) rather than inventing.

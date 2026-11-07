@@ -11,7 +11,7 @@ import { automationNodes, automationLines } from "./automation-model.mjs";
 import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
-import { rules, actorFacts, stateOf, grantSummaryOf, send, builtOk } from "./path.mjs";
+import { rules, actorFacts, stateOf, grantSummaryOf, sendAndWait, builtOk } from "./path.mjs";
 import { loadTreesChecked } from "./trees.mjs";
 import { hasAdvancement } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
@@ -42,10 +42,20 @@ function exists(uuid) {
 /** Characters that carry picks or granted documents. */
 const withPicks = () => (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.flags?.[ID]?.[PICKS_FLAG] || existingOf(a).length);
 
-/** The fixes health lines offer (each sends a GM request; the leader applies it). */
+/**
+ * A fix's run: sends the request and resolves only after the leader's reconcile finished (or ~30 s), so the Satchel's re-check sees
+ * the result. False when nothing could be sent. @param {"pathRefresh" | "pathOrphans"} kind @param {string} label
+ */
+const runAndWait = async (kind, label) => {
+  const r = await sendAndWait(kind, {});
+  if (r === false) return false;
+  return r === "timeout" ? `${label}: sent; the GM client hasn't answered yet (check again shortly).` : `${label}: done.`;
+};
+
+/** The fixes health lines offer (each sends a GM request; the leader applies it; run resolves when it is done). */
 export const FIXES = {
-  refresh: () => ({ label: "Refresh granted items", confirm: "Make every character's granted items and effects match their learned talents again (copies whose source changed are made again; untagged items are never touched)?", run: () => send("pathRefresh", {}) }),
-  orphans: () => ({ label: "Refund orphans", confirm: "Refund every rank in trees or talents that are no longer published, for every character, and remove what those ranks granted?", run: () => send("pathOrphans", {}) })
+  refresh: () => ({ label: "Refresh granted items", confirm: "Make every character's granted items and effects match their learned talents again (copies whose source changed are made again; untagged items are never touched)?", run: () => runAndWait("pathRefresh", "Refresh granted items") }),
+  orphans: () => ({ label: "Refund orphans", confirm: "Refund every rank in trees or talents that are no longer published, for every character, and remove what those ranks granted?", run: () => runAndWait("pathOrphans", "Refund orphans") })
 };
 
 /**
@@ -116,6 +126,7 @@ export async function report({ timeoutMs } = {}) {
     }
     if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
     if (!ok && packId()) add("warn", "The tree compendium can't be read: granted items are kept as they are until it can.");
+    else if (!packId() && granted) add("info", "No tree compendium is chosen: granted items are kept as they are until one is.");
     if (!bad) add("ok", list.length ? `${list.length} ${list.length === 1 ? "character has" : "characters have"} talents; nothing to fix.` : "No character has learned talents yet.");
   });
   await c.checkAsync("Automation", async add => {

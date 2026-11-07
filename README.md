@@ -43,7 +43,7 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 | `points(actor)` | experimental | Promise of `{ level, fromLevel, awards, total, spent, available, byTree }`, or null when you can't view the actor. Undefined when Talents is off. |
 | `refresh(actor?)` | experimental | GM: makes granted items and effects match the learned talents again, re-copying those whose source changed (Actor, id or UUID; none or `"all"`: every character). Returns whether the request was sent. Undefined when Talents is off. |
 | `healthReport({ timeoutMs })` | experimental | Promise of the read-only health report `[{ title, lines: [{ level, text }] }]` (GM; players get `[]`). |
-| `cleanup` | experimental | GM: `plan()`, `dryRun()`, `remove(pick, "REMOVE")` (picks, granted items and effects, settings; the tree compendium is never deleted). |
+| `cleanup` | experimental | GM (players get a warning and null): `plan()`, `dryRun()`, `remove(pick, "REMOVE")` (picks, granted items and effects, settings; the tree compendium is never deleted). |
 | `settings()` | experimental | GM: opens the Settings window. |
 | `builder` | experimental | The feature builder (feature *Feature builder*; undefined when off): `templates()` lists the templates as plain data (`{ id, label, hint, scales, range, itemOnly, params }`; `itemOnly` templates make a feature item only); `preview(spec, rank?, maxRanks?)` returns `{ ok, issues, text, line, changes, spec }` for a spec `{ template, params, base, step }` (X = base + step × (rank − 1)); `open()` (GM) opens the *Build a talent effect* window. |
 | `registerAutomation(key, handler)` | experimental | Stores a function for the automation key that talents name (`automation: { kind: "external", key, data }` on a node, set by *Described in the talent's text*). Keys: letters, digits, `.`, `-`, `_` (up to 100); the same key again replaces the handler. Returns whether it was stored. **Nothing invokes handlers in this version** (the call shape is not decided); the health report lists registered keys and talents waiting on one. Undefined when Talents is off. |
@@ -53,6 +53,8 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 - `wanderers-path.ready` (stable): fired once, with the api, in our `ready` hook.
 - `wanderers-path.learned` (experimental): `{ actorId, userId, changes: [{ tree, node, from, to }] }` after a Learn is saved. Only with *Hooks for other modules* on.
 - `wanderers-path.respec` (experimental): `{ actorId, userId, tree, removed: [{ tree, node, from, to }] }` after a refund or respec is saved (`tree` null = every tree, also after *Refund orphans*). Only with *Hooks for other modules* on.
+
+Internal (not for other modules): `wanderers-path.notice` (a notice for one user) and `wanderers-path.done` (`{ ticket }`, the leader's answer once a Refresh / Refund orphans health fix has finished).
 
 Stable members keep their name and shape within a major version; experimental ones may change in any release.
 

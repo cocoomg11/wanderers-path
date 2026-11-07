@@ -244,7 +244,7 @@ export function windowHTML(f) {
   const lock = m.unlocked ? "" : `<p class="wp-warn"><i class="fa-solid fa-lock" aria-hidden="true"></i> ${esc(m.lockedReason ?? "")}</p>`;
   const side = `<aside class="wp-side">${lock}${orphans}
     <section class="wp-box"><h3>Learned in this tree</h3><ul class="wp-list">${learned}</ul></section>
-    ${m.board ? "" : `<section class="wp-box"><h3>Progress</h3><div class="wp-small">${m.next === null ? "Every tier is open." : `Next tier opens at <b>${m.next}</b> points.`}</div><div class="wp-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.progress}"><i style="width:${m.progress}%"></i></div>
+    ${m.board ? "" : `<section class="wp-box"><h3>Progress</h3><div class="wp-small">${m.next === null ? "All tiers open." : `Next tier opens at <b>${m.next}</b> points.`}</div><div class="wp-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.progress}"><i style="width:${m.progress}%"></i></div>
       <div class="wp-small wp-muted">Points come from: ${pointsSource(m)}.</div></section>`}
     <section class="wp-box wp-small wp-muted"><b>Changes are a preview</b> until you click <i>Learn</i>.</section>${gm}</aside>`;
   return `<div class="wp-path">${head}<div class="wp-main"><div class="wp-tree">${board}</div>${side}</div>${footer(m, o)}${tabsHTML(m)}</div>`;

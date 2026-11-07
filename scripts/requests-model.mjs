@@ -11,6 +11,11 @@ import { AWARD_MAX, REASON_MAX } from "./picks-model.mjs";
 
 const ID = "wanderers-path";
 export const NOTICE_HOOK = `${ID}.notice`;
+/** The leader's "finished" signal for a GM-wide request that carried a ticket: `{ ticket }`, fired after every reconcile is done. */
+export const DONE_HOOK = `${ID}.done`;
+/** A ticket the sender makes up to wait for DONE_HOOK (not a user id; it only matches the answer to the question). */
+export const TICKET_RE = /^[A-Za-z0-9]{8,32}$/;
+/** @type {any} */ const ticket = { type: "string", pattern: TICKET_RE, max: 32, optional: true };
 /** @type {any} */ const actorId = { type: "id" };
 /** @type {any} */ const ref = { type: "string", pattern: NODE_ID_RE, max: 64 };
 
@@ -29,9 +34,9 @@ export const REQUESTS = defineRequests(/** @type {any} */ ({
   /** GM: add a tree to this character by hand, remove one, or back to automatic (by class and subclass). */
   pathTrees: { fields: { actorId, tree: ref, op: { type: "string", oneOf: ["add", "remove", "auto"] } }, from: "gm", maxBytes: 256 },
   /** GM: make this character's granted documents again from their sources (no actorId: every character). */
-  pathRefresh: { fields: { actorId: { ...actorId, optional: true } }, from: "gm", maxBytes: 256 },
+  pathRefresh: { fields: { actorId: { ...actorId, optional: true }, ticket }, from: "gm", maxBytes: 256 },
   /** GM: refund the ranks in trees and talents that are no longer published (no actorId: every character). */
-  pathOrphans: { fields: { actorId: { ...actorId, optional: true } }, from: "gm", maxBytes: 256 }
+  pathOrphans: { fields: { actorId: { ...actorId, optional: true }, ticket }, from: "gm", maxBytes: 256 }
 }));
 
 /**
@@ -44,6 +49,18 @@ export function readNotice(payload, me) {
   if (p.to !== null && p.to !== me) return null;
   return { level: p.level === "warn" || p.level === "error" ? p.level : "info", text: p.text.slice(0, 300) };
 }
+
+/**
+ * The ticket a DONE_HOOK payload carries, or "" when it isn't one.
+ * @param {unknown} payload
+ */
+export function readDone(payload) {
+  const t = /** @type {any} */ (payload)?.ticket;
+  return typeof t === "string" && TICKET_RE.test(t) ? t : "";
+}
+
+/** Whether this user may send `kind` (GM-only kinds refuse players before anything is sent). @param {string} kind @param {boolean} isGM */
+export const maySend = (kind, isGM) => isGM || /** @type {Record<string, { from?: string }>} */ (REQUESTS)[kind]?.from !== "gm";
 
 /**
  * The `changes` a Learn sends: every node whose pending rank is above the stored rank.
