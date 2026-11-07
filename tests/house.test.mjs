@@ -8,7 +8,7 @@ import * as Cleanup from "../scripts/cleanup.mjs";
 const src = (/** @type {string} */ p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const scripts = readdirSync(new URL("../scripts/", import.meta.url)).filter(f => f.endsWith(".mjs"));
 
-test("features, settings and hooks of 0.1.0", () => {
+test("features, settings and hooks (0.2.0)", () => {
   assert.deepEqual(F.FEATURES.map(f => f.id), ["talents", "sheetButton", "keybindings", "moduleHooks"]);
   for (const f of F.FEATURES.slice(1)) assert.deepEqual(f.needs, ["talents"]);
   const keys = S.ROWS.map(r => r.key);
@@ -57,10 +57,23 @@ test("public repo: no publisher or campaign words; no talent content", () => {
   assert.ok(!("packs" in JSON.parse(src("module.json"))));
 });
 
-test("cleanup: picks and settings removable, tree compendium only listed", () => {
-  assert.deepEqual(Cleanup.CATEGORIES.map(c => c[0]), ["picks", "settings", "trees"]);
-  assert.deepEqual([...Cleanup.REMOVABLE], ["picks", "settings"]);
+test("cleanup: picks, granted documents and settings removable, tree compendium only listed", () => {
+  assert.deepEqual(Cleanup.CATEGORIES.map(c => c[0]), ["picks", "granted", "settings", "trees"]);
+  assert.deepEqual([...Cleanup.REMOVABLE], ["picks", "granted", "settings"]);
   assert.match(src("scripts/cleanup.mjs"), /never deleted/);
+  assert.match(src("scripts/cleanup.mjs"), /if \(keys\.includes\("granted"\)\) done\.granted = await removeGranted\(\);[\s\S]*?keys\.includes\("picks"\)/, "granted documents go before the picks");
+});
+
+test("grant engine: leader-only writes, sources loaded in bulk, reconcile after every picks write", () => {
+  const g = src("scripts/grants.mjs");
+  assert.match(g, /export async function applyPlan[\s\S]*?if \(!leader\.isLeader\(\)\) throw/);
+  assert.doesNotMatch(g, /\bfromUuid\(/, "no async fromUuid per node");
+  assert.match(g, /getDocuments\(\{ _id__in:/);
+  for (const f of scripts.filter(f => !["grants.mjs", "cleanup.mjs"].includes(f))) assert.doesNotMatch(src(`scripts/${f}`), /(create|update|delete)EmbeddedDocuments/, f);
+  const p = src("scripts/path.mjs");
+  assert.equal((p.match(/await writePicks\(/g) ?? []).length, (p.match(/await writePicks\([^)]*\);\s*await syncGrants\(/g) ?? []).length, "every picks write is followed by a reconcile");
+  assert.match(p, /leader\.handle\("pathLearn", one\(onLearn\)\)/, "requests run one at a time per character");
+  assert.match(src("scripts/main.mjs"), /get refresh\(\) \{\s*if \(!F\.on\("talents"\)\) return undefined;/);
 });
 
 test("leader writes only: picks are written in one place, after the leader check", () => {

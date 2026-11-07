@@ -123,3 +123,15 @@ test("learnChanges / pendingFrom round trip; notices read only for this user", (
   assert.equal(readNotice({ to: null, text: "" }, "u1"), null);
   assert.equal(readNotice(null, "u1"), null);
 });
+
+test("GM box: granted items state, advancement note, Refresh; refresh / orphans requests are GM-only", () => {
+  const ok = V.windowHTML({ ...facts({ isGM: true }), grants: { count: 2, outOfSync: 0, advancement: [] } });
+  assert.match(ok, /2 granted items and effects, in step/); assert.match(ok, /data-action="gmRefresh"/);
+  const bad = V.windowHTML({ ...facts({ isGM: true }), grants: { count: 1, outOfSync: 3, advancement: ["<b>Thing</b>"] } });
+  assert.match(bad, /3 granted documents are out of step/);
+  assert.match(bad, /&lt;b&gt;Thing&lt;\/b&gt;: advancement doesn't run/);
+  assert.doesNotMatch(V.windowHTML(facts()), /gmRefresh/);
+  assert.equal(REQUESTS.pathRefresh.from, "gm"); assert.equal(REQUESTS.pathOrphans.from, "gm");
+  assert.equal(readRequest(REQUESTS, { action: "request", kind: "pathRefresh", rid: "aaaa-1-abc", data: {} }).ok, true);
+  assert.equal(readRequest(REQUESTS, { action: "request", kind: "pathRefresh", rid: "aaaa-1-abc", data: { actorId: "../x" } }).ok, false);
+});

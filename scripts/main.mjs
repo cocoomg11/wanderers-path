@@ -32,6 +32,19 @@ export const API = {
     if (!F.on("talents")) return undefined;
     return async (/** @type {any} */ a) => { const actor = Path.actorFrom(a); if (!actor || !actor.testUserPermission?.(game.user, "OBSERVER")) return null; return clone((await Path.stateOf(actor)).points); };
   },
+  /**
+   * GM: makes granted items and effects match the learned talents again, re-copying those whose source changed. An Actor, id or
+   * UUID; no argument (or "all"): every character. Returns whether the request was sent. Undefined when off.
+   */
+  get refresh() {
+    if (!F.on("talents")) return undefined;
+    return (/** @type {any} */ a) => {
+      if (!game.user?.isGM) { ui.notifications.warn(`${TITLE}: GM only.`); return false; }
+      if (a === undefined || a === null || a === "all") return Path.send("pathRefresh", {});
+      const actor = Path.actorFrom(a); if (!actor) { ui.notifications.warn(`${TITLE}: no such character.`); return false; }
+      return Path.send("pathRefresh", { actorId: actor.id });
+    };
+  },
   /** Read-only health report: [{ title, lines: [{ level, text }] }] (GM; players get []). */
   healthReport: (/** @type {{ timeoutMs?: number }} */ opts = {}) => Health.report(opts),
   /** Remove module data (GM): plan(), dryRun(), remove(pick, "REMOVE"). */

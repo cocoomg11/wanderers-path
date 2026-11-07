@@ -27,7 +27,11 @@ export const REQUESTS = defineRequests(/** @type {any} */ ({
   /** GM: talents on / off for this character, or back to the world's setting. */
   pathEnable: { fields: { actorId, enabled: { type: "string", oneOf: ["on", "off", "world"] } }, from: "gm", maxBytes: 256 },
   /** GM: add a tree to this character by hand, remove one, or back to automatic (by class and subclass). */
-  pathTrees: { fields: { actorId, tree: ref, op: { type: "string", oneOf: ["add", "remove", "auto"] } }, from: "gm", maxBytes: 256 }
+  pathTrees: { fields: { actorId, tree: ref, op: { type: "string", oneOf: ["add", "remove", "auto"] } }, from: "gm", maxBytes: 256 },
+  /** GM: make this character's granted documents again from their sources (no actorId: every character). */
+  pathRefresh: { fields: { actorId: { ...actorId, optional: true } }, from: "gm", maxBytes: 256 },
+  /** GM: refund the ranks in trees and talents that are no longer published (no actorId: every character). */
+  pathOrphans: { fields: { actorId: { ...actorId, optional: true } }, from: "gm", maxBytes: 256 }
 }));
 
 /**

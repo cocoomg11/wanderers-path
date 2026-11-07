@@ -20,7 +20,7 @@ export const AWARD_MAX = 50;
 export const REASON_MAX = 200;
 export const LOG_TEXT_MAX = 300;
 export const MAX_TREES = 50;
-export const LOG_KINDS = /** @type {const} */ (["learn", "refund", "respec", "award", "enable", "trees"]);
+export const LOG_KINDS = /** @type {const} */ (["learn", "refund", "respec", "award", "enable", "trees", "orphans"]);
 /** The award id older awards fold into when the list is full. */
 export const CARRIED = "carried";
 

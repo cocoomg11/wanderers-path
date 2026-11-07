@@ -1,7 +1,8 @@
 /**
  * The read-only health check (core's healthCollector): never throws, never writes. GM only (players get []): it names trees and
- * characters. Sections: Trees (compendium chosen, found, readable by players, published count, issues), Characters (orphan picks,
- * overspent), Learning (a GM is needed to learn). Untested in Node: needs a live world (the checks' rules are in the models).
+ * characters. Sections: Trees (compendium chosen, found, readable by players, published count, issues, granted items with
+ * advancement), Characters (orphan picks, overspent, granted documents out of step), Learning (a GM is needed to learn). Lines that
+ * have a safe fix carry it (core's `fix`): Refresh granted items, Refund orphans. Untested in Node: needs a live world (the checks' rules are in the models).
  */
 import { healthCollector } from "../vendor/wanderers-core/index.mjs";
 import { ID, PICKS_FLAG } from "./const.mjs";
@@ -9,7 +10,10 @@ import { F, leader } from "./core.mjs";
 import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
-import { rules, actorFacts } from "./path.mjs";
+import { rules, actorFacts, stateOf, grantSummaryOf, send } from "./path.mjs";
+import { loadTreesChecked } from "./trees.mjs";
+import { hasAdvancement } from "./grants-model.mjs";
+import { existingOf } from "./grants.mjs";
 
 /** Default per-section limit when the caller gives none; the caller's own (e.g. the Satchel's) is clamped to 1 s – 5 min. */
 export const REPORT_TIMEOUT_MS = 20000;
@@ -31,8 +35,23 @@ function exists(uuid) {
   } catch { return undefined; }
 }
 
-/** Characters that carry picks. */
-const withPicks = () => (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.flags?.[ID]?.[PICKS_FLAG]);
+/** Characters that carry picks or granted documents. */
+const withPicks = () => (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.flags?.[ID]?.[PICKS_FLAG] || existingOf(a).length);
+
+/** The fixes health lines offer (each sends a GM request; the leader applies it). */
+export const FIXES = {
+  refresh: () => ({ label: "Refresh granted items", confirm: "Make every character's granted items and effects match their learned talents again (copies whose source changed are made again; untagged items are never touched)?", run: () => send("pathRefresh", {}) }),
+  orphans: () => ({ label: "Refund orphans", confirm: "Refund every rank in trees or talents that are no longer published, for every character, and remove what those ranks granted?", run: () => send("pathOrphans", {}) })
+};
+
+/**
+ * Whether a world item (by UUID, already loaded) carries dnd5e advancement; undefined for compendium documents (only their index is
+ * at hand: the GM is told when the grant is made). @param {string} uuid
+ */
+function worldAdvancement(uuid) {
+  if (uuid.startsWith("Compendium.")) return undefined;
+  try { const d = fromUuidSync(uuid, { strict: false }); return d?.documentName === "Item" ? hasAdvancement(d._source ?? d) : undefined; } catch { return undefined; }
+}
 
 /**
  * The report: [{ title, lines: [{ level, text }] }].
@@ -61,18 +80,29 @@ export async function report({ timeoutMs } = {}) {
       const issues = treeIssues(t, { has: exists });
       for (const i of issues.slice(0, 10)) add(i.level, i.text);
       if (issues.length > 10) add("warn", `${t.name}: ${issues.length - 10} more issues.`);
+      for (const n of t.nodes) {
+        if (n.grant.mode !== "item") continue;
+        if (n.grant.ranks.some(r => "uuid" in r && worldAdvancement(r.uuid))) add("warn", `${t.name} › ${n.name} grants an item with advancement, which doesn't run on talent grants.`);
+      }
     }
   });
   await c.checkAsync("Characters", async add => {
-    const trees = await loadTrees(); const known = new Set(trees.map(t => t.id)); const r = rules();
-    const list = withPicks(); let bad = 0;
+    const { trees, ok } = await loadTreesChecked(); const known = new Set(trees.map(t => t.id)); const r = rules();
+    const list = withPicks(); let bad = 0; let outOfSync = 0, grantedChars = 0, granted = 0;
     for (const a of list) {
-      const picks = P.normalizePicks(a.flags[ID][PICKS_FLAG]);
+      const picks = P.normalizePicks(a.flags?.[ID]?.[PICKS_FLAG]);
       const orphans = Object.keys(picks.ranks).filter(id => !known.has(id));
-      if (orphans.length) { bad++; add("warn", `${a.name} has points in ${orphans.length === 1 ? "a tree" : "trees"} no longer published (${orphans.join(", ")}): a free respec gives them back.`); }
+      const lost = Object.entries(picks.ranks).filter(([id]) => known.has(id)).reduce((s, [id, m]) => { const t = trees.find(x => x.id === id); return s + Object.keys(m).filter(n => !t?.nodes.some(x => x.id === n)).length; }, 0);
+      if (ok && (orphans.length || lost)) { bad++; add("warn", `${a.name} has points in ${orphans.length ? `${orphans.length === 1 ? "a tree" : "trees"} no longer published (${orphans.join(", ")})` : `${lost} ${lost === 1 ? "talent" : "talents"} a tree no longer has`}.`, FIXES.orphans()); }
       const pts = P.pointsFor({ level: actorFacts(a).level, picks, trees, rules: r });
       if (pts.available < 0) { bad++; add("warn", `${a.name} has spent ${-pts.available} more ${pts.available === -1 ? "point" : "points"} than they have (a lower level or a smaller award?).`); }
+      const g = grantSummaryOf(a, await stateOf(a), ok);
+      granted += g.count; if (g.count) grantedChars++;
+      if (g.outOfSync) { outOfSync++; bad++; add("warn", `${a.name}: ${g.outOfSync} granted ${g.outOfSync === 1 ? "document is" : "documents are"} out of step with the learned talents.`, FIXES.refresh()); }
+      if (g.advancement.length) add("warn", `${a.name}: ${g.advancement.join(", ")} ${g.advancement.length === 1 ? "has" : "have"} advancement, which doesn't run on talent grants.`);
     }
+    if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
+    if (!ok && packId()) add("warn", "The tree compendium can't be read: granted items are kept as they are until it can.");
     if (!bad) add("ok", list.length ? `${list.length} ${list.length === 1 ? "character has" : "characters have"} talents; nothing to fix.` : "No character has learned talents yet.");
   });
   c.section("Learning");

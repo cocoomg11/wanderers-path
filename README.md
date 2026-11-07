@@ -2,7 +2,7 @@
 
 Customizable talent trees and spec boards for the dnd5e system in [Foundry VTT](https://foundryvtt.com). The GM builds the boards (the base shape, the nodes, what each node grants); each character spends points on them.
 
-**Status: in development.** Version 0.1.0: trees from your compendium, the classic tiered talent window, learning and refunds through the GM. Nothing is granted to the character yet (a later version adds the grant engine, the tree editor, the board layout and a Wanderer's Toolkit sheet page). What changed in each version: [CHANGELOG](CHANGELOG.md).
+**Status: in development.** Version 0.2.0: trees from your compendium, the classic tiered talent window, learning and refunds through the GM, and the grant engine (learned talents give the character copies of the items or effects their nodes point to; refunds take them back). Later versions add the tree editor, the feature builder, the board layout and a Wanderer's Toolkit sheet page. What changed in each version: [CHANGELOG](CHANGELOG.md).
 
 ## No content included
 
@@ -23,7 +23,7 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 ## Setting up (0.1.0)
 
 1. Create a world compendium of **Journal Entries** (e.g. "Talent trees"), set its Player ownership to **Observer**, and choose it in **Configure Settings › Wanderer's Path › Open settings › Tree compendium**.
-2. Each tree is one Journal Entry with its data in the flag `flags.wanderers-path.tree` (the editor comes in a later version). Shape: `{ v: 1, id, name, layout: "tiered", assign: { classes: ["<class identifier>"], subclasses: [] }, unlockLevel, tiered: { columns: 3, tierSize: 5 }, nodes: [{ id, name, text, tier, col, maxRanks, prereqs: [{ node, ranks }], gate: { level }, excludes: [] }] }`.
+2. Each tree is one Journal Entry with its data in the flag `flags.wanderers-path.tree` (the editor comes in a later version). Shape: `{ v: 1, id, name, layout: "tiered", assign: { classes: ["<class identifier>"], subclasses: [] }, unlockLevel, tiered: { columns: 3, tierSize: 5 }, nodes: [{ id, name, text, tier, col, maxRanks, prereqs: [{ node, ranks }], gate: { level }, excludes: [], grant: { mode: "item" | "effect" | "none", perRank: "scale" | "replace", ranks: [{ uuid }] } }] }`. A grant's `uuid` is an Item (compendium or world) or an Active Effect; "scale" keeps one copy and records the rank, "replace" uses one document per rank.
 3. Characters open their talents from the sheet's header menu (Talents) or the *Open talents* key binding.
 
 ## Public API and hooks
@@ -38,15 +38,16 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 | `open(actor?)` | experimental | Opens a character's talent window (Actor, id or UUID; default: your character or the selected token's). Undefined when Talents is off. |
 | `trees()` | experimental | Promise of the published trees (copies, normalized). Undefined when Talents is off. |
 | `points(actor)` | experimental | Promise of `{ level, fromLevel, awards, total, spent, available, byTree }`, or null when you can't view the actor. Undefined when Talents is off. |
+| `refresh(actor?)` | experimental | GM: makes granted items and effects match the learned talents again, re-copying those whose source changed (Actor, id or UUID; none or `"all"`: every character). Returns whether the request was sent. Undefined when Talents is off. |
 | `healthReport({ timeoutMs })` | experimental | Promise of the read-only health report `[{ title, lines: [{ level, text }] }]` (GM; players get `[]`). |
-| `cleanup` | experimental | GM: `plan()`, `dryRun()`, `remove(pick, "REMOVE")` (picks and settings; the tree compendium is never deleted). |
+| `cleanup` | experimental | GM: `plan()`, `dryRun()`, `remove(pick, "REMOVE")` (picks, granted items and effects, settings; the tree compendium is never deleted). |
 | `settings()` | experimental | GM: opens the Settings window. |
 
 **Hooks** (fired on every client, by the GM's client that saved the change):
 
 - `wanderers-path.ready` (stable): fired once, with the api, in our `ready` hook.
 - `wanderers-path.learned` (experimental): `{ actorId, userId, changes: [{ tree, node, from, to }] }` after a Learn is saved. Only with *Hooks for other modules* on.
-- `wanderers-path.respec` (experimental): `{ actorId, userId, tree, removed: [{ tree, node, from, to }] }` after a refund or respec is saved (`tree` null = every tree). Only with *Hooks for other modules* on.
+- `wanderers-path.respec` (experimental): `{ actorId, userId, tree, removed: [{ tree, node, from, to }] }` after a refund or respec is saved (`tree` null = every tree, also after *Refund orphans*). Only with *Hooks for other modules* on.
 
 Stable members keep their name and shape within a major version; experimental ones may change in any release.
 

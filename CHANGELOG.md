@@ -2,6 +2,40 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.2.0
+
+The grant engine: learned talents now give the character what their node grants (items or effects from your own compendiums or world), and refunds take it back. Nothing new in the window for players; the GM box gains the granted items' state and a Refresh button.
+
+- **Grants:** after every saved Learn, refund, respec, award, tree change or talents on / off, the GM's client makes the character's granted documents match the learned talents (one idempotent reconcile, one request at a time per character). Copies carry the tag `flags.wanderers-path.granted = { tree, node, rank, key, src, hash }`; items and effects without the tag are never touched, so a respec removes only what talents granted.
+- **Item grants** are copies (`toObject()`, new id, `_stats.compendiumSource` for a compendium source, `_stats.duplicateSource` for a world one); their effects keep `transfer`. A multi-rank node in "scale" mode keeps one copy named "Name (rank/max)" and records the rank (values that scale with the rank come with the feature builder); a "replace" node swaps the copy for each rank's own document. Sources are loaded once per compendium (`getDocuments({ _id__in })`) or synchronously from the world, never one by one.
+- **Effect grants:** an Active Effect on the character, copied from the source effect (or from an item's first effect that transfers), with the character as its origin.
+- **Advancement:** dnd5e advancement doesn't run on talent grants. The GM is told when a granted item has advancement (notice, GM box, health check).
+- **Refresh granted items** (GM box, `api.refresh(actor)`, `api.refresh()` for every character, and the health check's fix): copies whose source changed since they were made (the `hash`) are made again; anything missing is added and anything no learned talent grants is removed. Learning alone never re-copies a changed source.
+- **Orphans:** grants from trees or talents that are no longer published are removed on the next reconcile. The health check's *Refund orphans* fix refunds those ranks for every character. While the tree compendium can't be read, nothing is removed.
+- **Health:** granted documents out of step (fix: Refresh granted items), points in unpublished trees or talents (fix: Refund orphans), items with advancement.
+- **Remove data:** new category *granted* deletes the tagged items and effects on world actors and unlinked tokens' actors (before the picks).
+- API: `refresh(actor?)`. Hooks unchanged (ids only); a Refund orphans fires `wanderers-path.respec` with `tree: null`.
+
+### Untested in Foundry
+
+- [ ] A tree node with `grant: { mode: "item", ranks: [{ uuid: "<a compendium feat>" }] }`: Learn adds a copy to the character (name, effects, `_stats.compendiumSource` = the UUID, flag `granted`); a second Learn elsewhere doesn't add it twice.
+- [ ] A 3-rank "scale" node: rank 1 adds "Name (1/3)", rank 2 renames it to "Name (2/3)" (same item id, tag rank 2); a single-rank node keeps the plain name.
+- [ ] A "replace" node with a document per rank: rank 2 deletes the rank-1 copy and adds the rank-2 one.
+- [ ] Effect grants: from an Active Effect UUID (world item's effect and a compendium item's effect) and from an item UUID (its first transfer effect); the effect sits on the actor with origin = the actor and applies its changes.
+- [ ] A granted item whose effects transfer: the effects apply to the character (v13 and v14).
+- [ ] Refund one rank, Reset tree, Free respec: only tagged copies go; an item added by hand with the same name stays.
+- [ ] Remove a tree from a character (GM tools) or turn talents off: its grants go; add it back: they return.
+- [ ] Unpublish a tree / delete a node from it: next reconcile (any change, or Refresh) removes those grants; health shows the orphans with *Refund orphans*; the fix refunds them and fires `wanderers-path.respec`.
+- [ ] Unset the tree compendium: a Learn or Refresh removes nothing; health says granted items are kept.
+- [ ] Edit a source item after granting: health shows nothing out of step (it's not structural), Refresh re-copies it (new id), a plain Learn doesn't.
+- [ ] Delete a granted copy by hand: the GM box and health show it out of step; Refresh adds it back.
+- [ ] A granted class-feature item with advancement: the GM gets the notice and the GM box / health line; nothing breaks.
+- [ ] A missing source UUID: the GM gets "wasn't found"; an existing copy stays.
+- [ ] Two GM tabs: grants are created once (leader only); a player's Learn grants through the GM's client; quick double Learns don't create duplicates.
+- [ ] `api.refresh(actor)`, `api.refresh()` as GM send the request; as a player they warn and return false.
+- [ ] Remove data › granted: the dry run lists the copies; REMOVE deletes them (world actors and an unlinked token's actor) and leaves hand-made items.
+- [ ] The GM box redraws when a granted item is added or removed.
+
 ## 0.1.0
 
 First tools: talent trees from your own compendium, the classic tiered talent window, learning and refunds through the GM. Nothing is granted to the character yet (that comes with the grant engine in a later version). Compatibility stays at Foundry v13 minimum: nothing here needs a v14-only API (v14's deletion operator is used when it exists, else the v13 `-=` key).

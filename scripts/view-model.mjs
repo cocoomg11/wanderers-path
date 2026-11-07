@@ -73,6 +73,7 @@ export function arrowPath(a, b) {
  * @property {string | null} current the tab
  * @property {boolean} [packSet] a tree compendium is chosen
  * @property {boolean} [busy] a Learn is on its way
+ * @property {{ count: number, outOfSync: number, advancement: string[] }} [grants] the character's granted documents (GM box)
  */
 
 /**
@@ -180,7 +181,7 @@ function pointsSource(m) {
 
 /**
  * The GM's tools for this character (only for GMs).
- * @param {{ picks: Picks, allTrees: Tree[], seen: ViewFacts["seen"] }} f
+ * @param {{ picks: Picks, allTrees: Tree[], seen: ViewFacts["seen"], grants?: ViewFacts["grants"] }} f
  */
 export function gmToolsHTML(f) {
   const en = f.picks.enabled === null ? "world" : f.picks.enabled ? "on" : "off";
@@ -197,7 +198,20 @@ export function gmToolsHTML(f) {
     <div class="wp-row"><button type="button" class="wc-btn wc-btn-sm" data-action="gmAward"><i class="fa-solid fa-gift" aria-hidden="true"></i> Award points</button>
     <button type="button" class="wc-btn wc-btn-sm" data-action="gmRespec"><i class="fa-solid fa-broom" aria-hidden="true"></i> Free respec</button></div>
     ${rows ? `<ul class="wp-list wp-trees">${rows}</ul>` : `<p class="wc-hint">No trees are published yet.</p>`}
+    ${grantsHTML(f.grants)}
   </section>`;
+}
+
+/**
+ * The GM box's granted-items part: how many, whether they match the learned talents, the advancement note, and Refresh.
+ * @param {ViewFacts["grants"]} g
+ */
+export function grantsHTML(g) {
+  if (!g) return "";
+  const state = g.outOfSync ? `<p class="wp-warn"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> ${plural(g.outOfSync, "granted document is", "granted documents are")} out of step with the learned talents.</p>`
+    : `<p class="wc-hint">${g.count ? `${plural(g.count, "granted item or effect", "granted items and effects")}, in step with the learned talents.` : "No granted items or effects."}</p>`;
+  const adv = g.advancement.length ? `<p class="wp-warn"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> ${esc(g.advancement.join(", "))}: advancement doesn't run on talent grants.</p>` : "";
+  return `<div class="wp-grants">${state}${adv}<div class="wp-row"><button type="button" class="wc-btn wc-btn-sm" data-action="gmRefresh" data-tooltip="Make the granted items and effects again where their source changed, and add or remove what the learned talents call for."><i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh granted items</button></div></div>`;
 }
 
 /**

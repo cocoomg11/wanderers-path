@@ -11,6 +11,8 @@ import { normalizeTree } from "./tree-model.mjs";
 
 /** @type {Promise<Tree[]> | null} */
 let cache = null;
+/** Whether the last read of the tree compendium worked (false: none chosen, missing, or unreadable). */
+let readOk = false;
 /** @type {Set<() => void>} */
 const listeners = new Set();
 
@@ -36,6 +38,7 @@ export function loadTrees() {
   if (cache) return cache;
   cache = (async () => {
     const p = pack();
+    readOk = false;
     if (!p || p.documentName !== "JournalEntry") return [];
     try {
       const index = await p.getIndex({ fields: [`flags.${ID}.${TREE_FLAG}`] });
@@ -48,10 +51,21 @@ export function loadTrees() {
       }
       out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
       log(`trees: ${out.length} loaded from ${p.collection}`);
+      readOk = true;
       return out;
     } catch (e) { warn("couldn't read the tree compendium", e); cache = null; return []; }
   })();
   return cache;
+}
+
+/**
+ * The published trees, and whether they could be read. The grant engine removes nothing while `ok` is false: an unset or broken
+ * compendium must never strip every character's granted items.
+ * @returns {Promise<{ trees: Tree[], ok: boolean }>}
+ */
+export async function loadTreesChecked() {
+  const trees = await loadTrees();
+  return { trees, ok: readOk };
 }
 
 /** Hooks that invalidate the cache (init, feature on). Each bails out unless the change is in our pack. */

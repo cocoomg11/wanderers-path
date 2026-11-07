@@ -10,8 +10,9 @@ import { onRulesChanged } from "./core.mjs";
 import * as V from "./view-model.mjs";
 import { learnChanges } from "./requests-model.mjs";
 import { AWARD_MAX, REASON_MAX } from "./picks-model.mjs";
-import { stateOf, send, gmConnected, actorFrom } from "./path.mjs";
-import { onTreesChanged, packId } from "./trees.mjs";
+import { stateOf, send, gmConnected, actorFrom, grantSummaryOf } from "./path.mjs";
+import { onTreesChanged, packId, loadTreesChecked } from "./trees.mjs";
+import { GRANTED_FLAG } from "./grants.mjs";
 
 const { ApplicationV2, DialogV2 } = foundry.applications.api;
 /** Placement key (never rename: saved placements live under it). */
@@ -27,7 +28,7 @@ export class PathWindow extends RememberedWindow(ApplicationV2, { moduleId: ID, 
     position: { width: 760, height: 680 },
     actions: {
       node: PathWindow.#onNode, tab: PathWindow.#onTab, learn: PathWindow.#onLearn, undo: PathWindow.#onUndo, resetTree: PathWindow.#onReset,
-      gmAward: PathWindow.#onAward, gmRespec: PathWindow.#onRespec, gmTrees: PathWindow.#onTrees
+      gmAward: PathWindow.#onAward, gmRespec: PathWindow.#onRespec, gmTrees: PathWindow.#onTrees, gmRefresh: PathWindow.#onRefresh
     }
   };
 
@@ -52,7 +53,8 @@ export class PathWindow extends RememberedWindow(ApplicationV2, { moduleId: ID, 
     this.facts = {
       actor: { id: this.actor.id, name: String(this.actor.name ?? ""), level: st.facts.level }, isGM,
       canEdit: isGM || this.actor.isOwner, respec: isGM || st.rules.playerRespec, gmConnected: gmConnected(), rules: st.rules,
-      picks: st.picks, pending, seen: st.seen, allTrees: st.trees, current: this.current, packSet: !!packId(), busy: this.busy
+      picks: st.picks, pending, seen: st.seen, allTrees: st.trees, current: this.current, packSet: !!packId(), busy: this.busy,
+      grants: isGM ? grantSummaryOf(this.actor, st, (await loadTreesChecked()).ok) : undefined
     };
     const div = document.createElement("div");
     div.className = "wp-body";
@@ -160,6 +162,12 @@ export class PathWindow extends RememberedWindow(ApplicationV2, { moduleId: ID, 
     if (ok) { self.pending = null; send("pathRefund", { actorId: self.actor.id }); }
   }
 
+  static #onRefresh() {
+    const self = /** @type {PathWindow} */ (/** @type {unknown} */ (this));
+    if (!game.user?.isGM) return;
+    send("pathRefresh", { actorId: self.actor.id });
+  }
+
   static #onTrees(/** @type {Event} */ _ev, /** @type {HTMLElement} */ el) {
     const self = /** @type {PathWindow} */ (/** @type {unknown} */ (this));
     if (!game.user?.isGM) return;
@@ -226,6 +234,12 @@ export function registerHooks() {
     const app = open.get(item.parent?.id); if (app) app.refresh({ keepPending: true });
   };
   for (const h of ["createItem", "updateItem", "deleteItem"]) Hooks.on(h, itemChange);
+  // A granted item or effect added or removed: the GM box's count changes.
+  const grantChange = (/** @type {any} */ doc) => {
+    if (!game.user?.isGM || !doc?.flags?.[ID]?.[GRANTED_FLAG]) return;
+    const app = open.get(doc.parent?.id); if (app) app.refresh({ keepPending: true });
+  };
+  for (const h of ["createItem", "deleteItem", "createActiveEffect", "deleteActiveEffect"]) Hooks.on(h, grantChange);
   onTreesChanged(refreshAll);
   onRulesChanged(refreshAll);
   // Who is connected changes whether Learn works.
