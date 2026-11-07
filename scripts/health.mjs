@@ -6,7 +6,8 @@
  */
 import { healthCollector } from "../vendor/wanderers-core/index.mjs";
 import { ID, PICKS_FLAG } from "./const.mjs";
-import { F, leader } from "./core.mjs";
+import { F, AUTOMATIONS, leader } from "./core.mjs";
+import { automationNodes, automationLines } from "./automation-model.mjs";
 import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
@@ -16,7 +17,7 @@ import { hasAdvancement } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
 import * as SheetPage from "./sheet-page.mjs";
 import { pageStatus } from "./sheet-page-model.mjs";
-import { specIssues } from "./builder-model.mjs";
+import { specIssues, templateOf } from "./builder-model.mjs";
 
 /** Default per-section limit when the caller gives none; the caller's own (e.g. the Satchel's) is clamped to 1 s – 5 min. */
 export const REPORT_TIMEOUT_MS = 20000;
@@ -86,7 +87,13 @@ export async function report({ timeoutMs } = {}) {
       for (const n of t.nodes) {
         const built = n.grant.ranks.filter(r => "built" in r);
         if (built.length && !builtOk()) add("warn", `${t.name} › ${n.name} has a built effect, which needs Foundry 14 and dnd5e 6: it grants nothing here.`);
-        for (const r of built) { const i = specIssues(/** @type {any} */ (r).built, { maxRanks: n.maxRanks }); if (i.length) add("bad", `${t.name} › ${n.name}: ${i[0]}`); }
+        for (const r of built) {
+          const raw = /** @type {any} */ (r).built;
+          const i = specIssues(raw, { maxRanks: n.maxRanks }); if (i.length) { add("bad", `${t.name} › ${n.name}: ${i[0]}`); continue; }
+          const tpl = templateOf(raw?.template);
+          if (tpl?.itemOnly && n.grant.mode !== "item") add("bad", `${t.name} › ${n.name}: ${tpl.label} makes a feature item, but the talent grants an effect: it grants nothing.`);
+          if (tpl?.id === "spell" && exists(String(raw.params?.spell ?? "")) === false) add("warn", `${t.name} › ${n.name}: the granted spell's UUID points at nothing.`);
+        }
         if (n.grant.mode !== "item") continue;
         if (n.grant.ranks.some(r => "uuid" in r && worldAdvancement(r.uuid))) add("warn", `${t.name} › ${n.name} grants an item with advancement, which doesn't run on talent grants.`);
       }
@@ -110,6 +117,10 @@ export async function report({ timeoutMs } = {}) {
     if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
     if (!ok && packId()) add("warn", "The tree compendium can't be read: granted items are kept as they are until it can.");
     if (!bad) add("ok", list.length ? `${list.length} ${list.length === 1 ? "character has" : "characters have"} talents; nothing to fix.` : "No character has learned talents yet.");
+  });
+  await c.checkAsync("Automation", async add => {
+    const trees = await loadTrees();
+    for (const l of automationLines(AUTOMATIONS.keys(), automationNodes(trees, k => AUTOMATIONS.has(k)))) add(l.level, l.text);
   });
   c.section("Toolkit sheet page");
   c.check(add => {

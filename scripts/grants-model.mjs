@@ -89,7 +89,7 @@ export function desiredGrants(picks, trees, { built = true } = {}) {
  */
 export function builtSource(g) {
   if (!g.built) return null;
-  const data = buildTemplate(g.built, g.rank, { mode: g.mode === "item" ? "item" : "effect", node: g.facts });
+  const data = buildTemplate(g.built, g.rank, { mode: g.mode === "item" ? "item" : "effect", node: g.facts, key: g.key });
   if (!data) return null;
   return { data, hash: stableHash({ spec: g.built, mode: g.mode, facts: g.facts ?? null }) };
 }
@@ -273,18 +273,25 @@ export function grantSummary(desired, existing, o = {}) {
 
 /**
  * What a rank change rewrites on a built copy (pure; grants.mjs applies it): for an effect, `{ effect: { system.changes,
- * description } }`; for an item, `{ item: { system.description.value }, effects: [{ _id, system.changes, description }] }` for each of
- * its effects made by the builder (`flags.wanderers-path.built`). Null when the grant isn't built or can't be built at that rank.
+ * description } }`; for an item, `{ item: { system.description.value, system.uses.max, system.activities.<id> }, effects: [{ _id,
+ * system.changes, description }] }` for each of its effects made by the builder (`flags.wanderers-path.built`). Activities keep their
+ * ids (`activityId` of the grant key), so they are updated in place and their spent uses are kept (`system.uses.spent` too). Null
+ * when the grant isn't built or can't be built at that rank.
  * @param {Grant} g @param {{ effects?: { _id: string, flags?: any }[] }} [doc] the copy's data (an item's effects, by id)
  */
 export function builtRankUpdate(g, doc = {}) {
   const src = builtSource(g); if (!src) return null;
   const fx = g.type === "Item" ? src.data.effects?.[0] : src.data;
-  if (!fx) return null;
-  const effect = { "system.changes": fx.system.changes, description: fx.description, [`flags.wanderers-path.built.rank`]: g.rank };
-  if (g.type === "ActiveEffect") return { effect, effects: [] };
-  const ids = (Array.isArray(doc.effects) ? doc.effects : []).filter(e => isObj(e?.flags?.["wanderers-path"]?.built)).map(e => e._id);
-  return { item: { "system.description.value": src.data.system.description.value, [`flags.wanderers-path.built.rank`]: g.rank }, effects: ids.map(_id => ({ _id, ...effect })) };
+  const effect = fx ? { "system.changes": fx.system.changes, description: fx.description, [`flags.wanderers-path.built.rank`]: g.rank } : null;
+  if (g.type === "ActiveEffect") return effect ? { effect, effects: [] } : null;
+  const sys = src.data.system ?? {};
+  /** @type {Record<string, any>} */
+  const item = { "system.description.value": sys.description.value, [`flags.wanderers-path.built.rank`]: g.rank };
+  if (isObj(sys.uses)) item["system.uses.max"] = sys.uses.max;
+  // `_id` and `type` stay out: the activity is found by its id and its type never changes (another type = another spec = a new copy).
+  for (const [id, a] of Object.entries(isObj(sys.activities) ? sys.activities : {})) { const { _id, type, ...rest } = a; item[`system.activities.${id}`] = rest; }
+  const ids = effect ? (Array.isArray(doc.effects) ? doc.effects : []).filter(e => isObj(e?.flags?.["wanderers-path"]?.built)).map(e => e._id) : [];
+  return { item, effects: effect ? ids.map(_id => ({ _id, ...effect })) : [] };
 }
 
 /** A copy's name for a new rank: its current name without an old "(r/max)" suffix, then `grantName`. @param {string} name @param {Grant} g */

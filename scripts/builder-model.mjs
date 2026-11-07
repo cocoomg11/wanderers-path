@@ -9,6 +9,13 @@
  * shimmed legacy key) and uses Foundry 14's change shape `{ key, type, value, phase, priority }` stored in `system.changes`, as in
  * dnd5e 6.0.6's own compendium effects. Built grants therefore need Foundry 14 and dnd5e 6 (`builderSupported`).
  *
+ * Part B (0.4.0) adds item-only templates (`itemOnly`: grant mode "item" only): "Uses per rest" (a feat with `system.uses` and one
+ * utility, heal or damage activity that spends a use), "Grant a spell" (a feat with a cast activity; dnd5e caches the spell on the
+ * actor and lists it in the spellbook) and "Described in the talent's text" (a feat with only the node's text; the node may carry
+ * `automation: { kind: "external", key, data }` for a handler registered with `api.registerAutomation`, which nothing runs yet), plus
+ * the "Extra damage die" effect. Activity data follows dnd5e 6.0.6's activity models and its own packs; activity ids are 16
+ * letters and digits (Foundry's id rule), made from the grant key (`activityId`), so a copy's activities keep their ids.
+ *
  * Names are generic: the effect and the item are named after the GM's node; the template texts are plain rules words.
  */
 import { esc } from "../vendor/wanderers-core/index.mjs";
@@ -44,6 +51,23 @@ export const CONDITIONS = Object.freeze({
 export const ARMOR = Object.freeze({ lgt: "light armor", med: "medium armor", hvy: "heavy armor", shl: "shields" });
 /** dnd5e 6.0.6 `CONFIG.DND5E.weaponProficiencies` keys (a single weapon's key, such as `dagger`, is accepted too). */
 export const WEAPONS = Object.freeze({ sim: "simple weapons", mar: "martial weapons" });
+/** dnd5e 6.0.6 `CONFIG.DND5E.limitedUsePeriods` keys offered for uses (a long rest also recovers "sr" uses: `restTypes.long.recoverPeriods`). */
+export const PERIODS = Object.freeze({ sr: "short rest", lr: "long rest" });
+/** dnd5e 6.0.6 `CONFIG.DND5E.activityActivationTypes` keys offered. */
+export const ACTIVATIONS = Object.freeze({ action: "an action", bonus: "a bonus action", reaction: "a reaction", special: "no set time" });
+/** dnd5e 6.0.6 `CONFIG.DND5E.healingTypes` keys. */
+export const HEALING = Object.freeze({ healing: "hit points", temphp: "temporary hit points" });
+/** Damage dice offered (dnd5e 6.0.6 `CONFIG.DND5E.dieSteps`, up to d12). */
+export const DICE = Object.freeze({ 4: "d4", 6: "d6", 8: "d8", 10: "d10", 12: "d12" });
+/** Where an extra damage die applies: dnd5e 6.0.6 `system.rolls.damage` has `mwak`, `rwak`, `msak`, `rsak` only (no global key). */
+export const DAMAGE_ON = Object.freeze({ weapon: "weapon attacks", mwak: "melee weapon attacks", rwak: "ranged weapon attacks", spell: "spell attacks", all: "weapon and spell attacks" });
+const DAMAGE_KINDS = Object.freeze({ weapon: ["mwak", "rwak"], mwak: ["mwak"], rwak: ["rwak"], spell: ["msak", "rsak"], all: ["mwak", "rwak", "msak", "rsak"] });
+/** An Item UUID: a compendium item or a world item. */
+export const ITEM_UUID_RE = /^(Compendium\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.Item\.[A-Za-z0-9]{16}|Item\.[A-Za-z0-9]{16})$/;
+/** A roll formula as the builder takes it: digits, dice, + − × ÷, brackets and roll data (`@abilities.wis.mod`, `@prof`); 60 characters. */
+export const FORMULA_RE = /^(?=.*[0-9@])[0-9A-Za-z@._+\-*/() ]{1,60}$/;
+/** An external automation key (empty = none). */
+export const AUTOMATION_KEY_RE = /^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 /** A dnd5e key the world may extend (tools, languages, single weapons): lower-case letters, digits, "-" and "_". */
 export const KEY_RE = /^[a-z][a-z0-9_-]{0,39}$/;
 /** The default image of a built effect or item (Foundry core). */
@@ -55,15 +79,36 @@ const PROF_KINDS = Object.freeze({ skill: "a skill", save: "a saving throw", too
 const DEFENSE_KINDS = Object.freeze({ dr: "Resistance", di: "Immunity", dv: "Vulnerability", ci: "Condition immunity" });
 const HP_PER = Object.freeze({ level: "per character level", overall: "in total" });
 const LEVELS = Object.freeze({ 1: "proficiency", 2: "expertise" });
+const USE_ACTIONS = Object.freeze({ utility: "Nothing to roll (a use of the feature)", heal: "Healing", damage: "Damage" });
+const HEAL_WHO = Object.freeze({ self: "the character", creature: "one creature they touch" });
+const CAST_COST = Object.freeze({ uses: "X times per rest", free: "at will" });
+const YES_NO = Object.freeze({ yes: "yes", no: "no" });
+const CAST_ABILITY = Object.freeze({ "": "the character's spellcasting ability", ...ABILITIES });
 
 /**
- * A parameter: `options` (fixed keys → plain labels) or `free` (a key matching KEY_RE). `when(params)` false = not used.
- * @typedef {{ key: string, label: string, options?: Readonly<Record<string, string>>, free?: string, dflt: string, when?: (p: Record<string, string>) => boolean, optionsFor?: (p: Record<string, string>) => Readonly<Record<string, string>> }} Param
+ * A deterministic activity id for a grant key: 16 letters and digits (Foundry's `isValidId`), the same for every rank and every
+ * build of that key, so a copy's activities (and the cast activity's cached spell, found by `cachedFor`) keep their ids.
+ * @param {string} key
+ */
+export function activityId(key) {
+  const str = `wanderers-path:${key}`;
+  let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 ^ c, 2246822519); }
+  const part = (/** @type {number} */ n) => (n >>> 0).toString(36).padStart(7, "0");
+  return `wp${part(h1)}${part(h2)}`.slice(0, 16);
+}
+
+/**
+ * A parameter: `options` (fixed keys → plain labels) or `free` (a key matching KEY_RE, or `re` when given: a UUID, a formula, an
+ * automation key; `bad` is then the message, `max` the length, default 40; `ui` "spell" = the spell picker). `when(params)` false = not used.
+ * @typedef {{ key: string, label: string, options?: Readonly<Record<string, string>>, free?: string, re?: RegExp, bad?: string, max?: number, ui?: "spell", dflt: string, when?: (p: Record<string, string>) => boolean, optionsFor?: (p: Record<string, string>) => Readonly<Record<string, string>> }} Param
  */
 /**
  * @typedef {object} Template
  * @property {string} id @property {string} label plain-language name @property {string} hint
- * @property {Param[]} params @property {boolean} scales whether X matters
+ * @property {Param[]} params @property {boolean} scales whether X matters @property {(p: Record<string, string>) => boolean} [scalesIf] X matters only then
+ * @property {boolean} [itemOnly] makes a feat item (grant mode "item" only) @property {boolean} [describe] the item's description is the node's text only
+ * @property {(p: Record<string, string>, x: number, o: { id: string }) => Record<string, any>} [item] what the feat's `system` gets (uses, activities, properties)
  * @property {[number, number]} range allowed X
  * @property {[number, number]} [start] default base and step (else [range low, 1] when it scales, [0, 0] when not)
  * @property {(p: Record<string, string>, x: number) => string} text what one rank gives, in plain words
@@ -71,6 +116,23 @@ const LEVELS = Object.freeze({ 1: "proficiency", 2: "expertise" });
  * @property {(p: Record<string, string>, x: number) => string} [show] how a value reads in the preview line
  * @property {(p: Record<string, string>, x: number) => { key: string, type: Change["type"], value: string }[]} changes
  */
+
+/** Whether X matters for a template with these values. @param {Template} t @param {Record<string, string>} p */
+export const scalesFor = (t, p) => t.scales && (!t.scalesIf || t.scalesIf(p));
+/** @param {number} x @param {string} one @param {string} many */
+const count = (x, one, many) => `${x} ${x === 1 ? one : many}`;
+/** One use spent from the item itself (dnd5e 6.0.6 ConsumptionTargetData; target "" = this item). */
+const SPEND_ONE = Object.freeze({ type: "itemUses", target: "", value: "1", scaling: {} });
+/** A rolled part with a custom formula (dnd5e 6.0.6 DamageData; as its own packs write custom parts). @param {string} formula @param {string} type */
+const part = (formula, type) => ({ number: null, denomination: 0, bonus: "", types: [type], custom: { enabled: true, formula }, scaling: { number: 1 } });
+/** @param {Record<string, string>} p */
+function usesWhat(p) {
+  if (p.action === "heal") return `${p.who === "creature" ? "one creature they touch regains" : "regain"} ${p.formula} ${HEALING[p.heal] ?? p.heal}`;
+  if (p.action === "damage") return `${p.formula} ${DAMAGE[p.type] ?? p.type} damage`;
+  return "a use of the feature";
+}
+/** The feat's uses: max X, recovered in full on that rest (dnd5e 6.0.6 UsesField). @param {string} period @param {number} x */
+const usesData = (period, x) => ({ max: `${x}`, spent: 0, recovery: [{ period, type: "recoverAll" }] });
 
 /** @param {number} x */
 const signed = x => (x < 0 ? `${x}` : `+${x}`);
@@ -177,6 +239,86 @@ export const TEMPLATES = Object.freeze([
     params: [],
     text: (_p, x) => `Weapon critical hits on ${crit(x)}`, phrase: () => "Weapon critical hits on", show: (_p, x) => crit(x),
     changes: (_p, x) => [{ key: "flags.dnd5e.weaponCriticalThreshold", type: "downgrade", value: `${20 - x}` }]
+  },
+  {
+    id: "damageDie", label: "Extra damage die", hint: "Attacks deal +X dice of extra damage (weapon attacks, spell attacks, or both).", scales: true, range: [1, 10],
+    params: [
+      { key: "die", label: "Die", options: DICE, dflt: "6" },
+      { key: "type", label: "Damage type", options: DAMAGE, dflt: "fire" },
+      { key: "on", label: "On", options: DAMAGE_ON, dflt: "weapon" }
+    ],
+    text: (p, x) => `+${x}d${p.die} ${DAMAGE[p.type]} damage on ${DAMAGE_ON[p.on]}`, phrase: p => `+Xd${p.die} ${DAMAGE[p.type]} damage on ${DAMAGE_ON[p.on]}`,
+    show: (p, x) => `${x}d${p.die}`,
+    changes: (p, x) => (DAMAGE_KINDS[p.on] ?? []).map(k => ({ key: `system.rolls.damage.${k}.bonus`, type: /** @type {const} */ ("add"), value: `${x}d${p.die}[${p.type}]` }))
+  },
+  {
+    id: "uses", label: "Uses per rest", hint: "A feature used X times per short or long rest: nothing to roll, healing, or damage. Each use spends one.", scales: true, range: [1, 20],
+    itemOnly: true,
+    params: [
+      { key: "action", label: "When used", options: USE_ACTIONS, dflt: "utility" },
+      { key: "period", label: "Uses come back after a", options: PERIODS, dflt: "lr" },
+      { key: "activation", label: "Takes", options: ACTIVATIONS, dflt: "action" },
+      { key: "formula", label: "Formula", re: FORMULA_RE, max: 60, bad: "a roll formula such as 2d8 + @abilities.wis.mod", dflt: "1d8", when: p => p.action !== "utility" },
+      { key: "heal", label: "Restores", options: HEALING, dflt: "healing", when: p => p.action === "heal" },
+      { key: "who", label: "Who", options: HEAL_WHO, dflt: "self", when: p => p.action === "heal" },
+      { key: "type", label: "Damage type", options: DAMAGE, dflt: "fire", when: p => p.action === "damage" }
+    ],
+    text: (p, x) => `${count(x, "use", "uses")} per ${PERIODS[p.period]}: ${usesWhat(p)}`, phrase: p => `X uses per ${PERIODS[p.period]}: ${usesWhat(p)}`,
+    changes: () => [],
+    item: (p, x, { id }) => {
+      /** @type {Record<string, any>} */
+      const a = {
+        _id: id, type: p.action, name: "", sort: 0,
+        activation: { type: p.activation, value: null, override: false, condition: "" },
+        consumption: { targets: [{ ...SPEND_ONE }], scaling: { allowed: false }, spellSlot: true }
+      };
+      if (p.action === "utility") a.roll = { formula: "", name: "", prompt: false, visible: false };
+      if (p.action === "heal") {
+        a.healing = part(p.formula, p.heal);
+        a.range = p.who === "creature" ? { units: "touch", override: false } : { units: "self", override: false };
+        a.target = { affects: p.who === "creature" ? { type: "creature", count: "1", choice: false } : { type: "self", choice: false }, override: false, prompt: false };
+      }
+      if (p.action === "damage") {
+        a.damage = { critical: { allow: false, bonus: "" }, parts: [part(p.formula, p.type)] };
+        a.range = { units: "spec", override: false };
+        a.target = { affects: { type: "creature", count: "1", choice: false }, override: false, prompt: false };
+      }
+      return { uses: usesData(p.period, x), activities: { [id]: a } };
+    }
+  },
+  {
+    id: "spell", label: "Grant a spell", hint: "The character can cast a spell without a spell slot: X times per rest, or at will. Drop the spell or paste its UUID.", scales: true, range: [1, 20],
+    itemOnly: true, scalesIf: p => p.cost === "uses",
+    params: [
+      { key: "spell", label: "Spell", re: ITEM_UUID_RE, max: 300, ui: "spell", bad: "drop a spell here or paste its UUID", dflt: "" },
+      { key: "cost", label: "Cast", options: CAST_COST, dflt: "uses" },
+      { key: "period", label: "Uses come back after a", options: PERIODS, dflt: "lr", when: p => p.cost === "uses" },
+      { key: "ability", label: "Casting ability", options: CAST_ABILITY, dflt: "" },
+      { key: "book", label: "List it in the spellbook", options: YES_NO, dflt: "yes" }
+    ],
+    text: (p, x) => `Casts the chosen spell without a spell slot, ${p.cost === "uses" ? `${count(x, "time", "times")} per ${PERIODS[p.period]}` : "at will"}`,
+    phrase: p => `Casts the chosen spell without a spell slot, X times per ${PERIODS[p.period] ?? "rest"}`,
+    changes: () => [],
+    // As dnd5e 6.0.6's own packs grant a spell from a feature: a cast activity (`spell.uuid`; `spellbook` lists the cached spell),
+    // spending the feature's uses. `properties: []` keeps the spell's components (dnd5e removes the ones listed).
+    item: (p, x, { id }) => ({
+      ...(p.cost === "uses" ? { uses: usesData(p.period, x) } : {}),
+      properties: ["mgc"],
+      activities: { [id]: {
+        _id: id, type: "cast", name: "", sort: 0,
+        activation: { type: "", override: false, condition: "" },
+        consumption: { targets: p.cost === "uses" ? [{ ...SPEND_ONE }] : [], scaling: { allowed: false }, spellSlot: true },
+        spell: { uuid: p.spell, spellbook: p.book !== "no", ability: p.ability, level: null, properties: [], challenge: { override: false } }
+      } }
+    })
+  },
+  {
+    id: "describe", label: "Described in the talent's text", hint: "A feature item that only carries the talent's text: for effects the builder can't make (yet). An optional automation key names a handler another module may register.", scales: false, range: [0, 0],
+    itemOnly: true, describe: true,
+    params: [{ key: "automation", label: "Automation key (optional)", re: AUTOMATION_KEY_RE, max: 100, bad: "letters, digits, \".\", \"-\" and \"_\", or leave it empty", dflt: "" }],
+    text: p => `A feature with the talent's text${p.automation ? ` (automation "${p.automation}", not run in this version)` : ""}`,
+    phrase: p => `A feature with the talent's text${p.automation ? ` (automation "${p.automation}", not run in this version)` : ""}`,
+    changes: () => []
   }
 ]);
 
@@ -229,17 +371,19 @@ export function normalizeSpec(raw, { fit = false } = {}) {
   for (let pass = 0; pass < 2; pass++) {
     for (const d of activeParams(t, p)) {
       const v = given[d.key];
-      let val = typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, 40) : p[d.key] ?? d.dflt;
+      let val = typeof v === "string" || typeof v === "number" ? String(v).trim().slice(0, d.max ?? 40) : p[d.key] ?? d.dflt;
       // `fit` (the builder window): a value the parameter doesn't take now (another kind was chosen) goes back to its default.
+      // Text the GM types into its own field (`re`: a UUID, a formula) is kept, so they can finish typing it.
       const opts = optionsOf(d, p);
-      if (fit && !(opts && val in opts) && !(d.free && KEY_RE.test(val))) val = d.dflt;
+      if (fit && !d.re && !(opts && val in opts) && !(d.free && KEY_RE.test(val))) val = d.dflt;
       p[d.key] = val;
     }
   }
   /** @type {Record<string, string>} */ const params = {};
   for (const d of activeParams(t, p)) params[d.key] = p[d.key];
   const [b0, s0] = t.start ?? (t.scales ? [t.range[0], 1] : [0, 0]);
-  return { template: t.id, params, base: t.scales ? int(raw.base, b0) : 0, step: t.scales ? int(raw.step, s0) : 0 };
+  const sc = scalesFor(t, params);
+  return { template: t.id, params, base: sc ? int(raw.base, b0) : 0, step: sc ? int(raw.step, s0) : 0 };
 }
 
 /** X at a rank. @param {Spec} s @param {number} rank */
@@ -256,11 +400,12 @@ export function specIssues(raw, { maxRanks = 1 } = {}) {
   const out = [];
   for (const d of activeParams(t, s.params)) {
     const v = s.params[d.key]; const opts = optionsOf(d, s.params);
+    if (d.re) { if (!d.re.test(v)) out.push(`${d.label}: ${v ? `"${v.slice(0, 60)}" won't do: ` : ""}${d.bad ?? "not valid"}.`); continue; }
     if (opts && v in opts) continue;
     if (d.free && KEY_RE.test(v)) continue;
     out.push(`${d.label}: "${v}" isn't one of the choices${d.free ? ` (${d.free})` : ""}.`);
   }
-  if (t.scales) {
+  if (scalesFor(t, s.params)) {
     if (!Number.isInteger(s.base) || !Number.isInteger(s.step)) out.push("X needs whole numbers.");
     const [lo, hi] = t.range;
     for (let r = 1; r <= Math.min(5, Math.max(1, maxRanks)); r++) {
@@ -286,7 +431,7 @@ export function previewLine(raw, maxRanks = 1) {
   const issues = specIssues(s, { maxRanks }); if (issues.length) return issues[0];
   const t = /** @type {Template} */ (templateOf(s.template));
   const n = Math.min(5, Math.max(1, Math.round(maxRanks)));
-  if (!t.scales || n === 1) return `${t.text(s.params, valueAt(s, 1))}${n > 1 ? " (every rank)" : ""}`;
+  if (!scalesFor(t, s.params) || n === 1) return `${t.text(s.params, valueAt(s, 1))}${n > 1 ? " (every rank)" : ""}`;
   const show = t.show ?? ((_p, x) => String(x));
   const vals = Array.from({ length: n }, (_, i) => show(s.params, valueAt(s, i + 1)));
   if (s.step === 0) return `${t.text(s.params, valueAt(s, 1))} (every rank)`;
@@ -305,30 +450,38 @@ export function buildChanges(raw, rank) {
 
 /** The description of a built item at a rank (HTML, escaped): the sentence, then the node's own text. @param {unknown} raw @param {number} rank @param {NodeFacts} node */
 export function builtDescription(raw, rank, node) {
-  return `<p>${esc(specText(raw, rank))}</p>${node.text ? `<p>${esc(node.text)}</p>` : ""}`;
+  const t = templateOf(normalizeSpec(raw)?.template);
+  const own = node.text ? `<p>${esc(node.text)}</p>` : "";
+  if (t?.describe) return own;
+  return `<p>${esc(specText(raw, rank))}</p>${own}`;
 }
 
 /**
  * dnd5e-native data for one rank (pure; the grant engine tags it and names it): an Active Effect for grant mode "effect", or a
  * feat item carrying one transfer effect for mode "item". Null when the spec can't be built.
+ * Item-only templates (uses, spell, describe) build only in mode "item" (null for "effect"); their feat carries `system.uses` and
+ * `system.activities` (ids from `key`, the grant key: `activityId`) and an effect only when the template also makes changes.
  * `buildTemplate(spec, rank)` without node facts names it after the template.
- * @param {unknown} raw @param {number} rank @param {{ mode?: "item" | "effect", node?: Partial<NodeFacts> }} [o]
+ * @param {unknown} raw @param {number} rank @param {{ mode?: "item" | "effect", node?: Partial<NodeFacts>, key?: string }} [o]
  * @returns {Record<string, any> | null}
  */
-export function buildTemplate(raw, rank, { mode = "effect", node = {} } = {}) {
+export function buildTemplate(raw, rank, { mode = "effect", node = {}, key = "" } = {}) {
   const s = normalizeSpec(raw);
-  const changes = buildChanges(s, rank); if (!s || !changes.length) return null;
+  if (!s || specIssues(s, { maxRanks: rank }).length) return null;
   const t = /** @type {Template} */ (templateOf(s.template));
+  const changes = buildChanges(s, rank);
+  if (t.itemOnly ? mode !== "item" : !changes.length) return null;
   const facts = { name: String(node.name ?? "").trim() || t.label, img: String(node.img ?? "").trim() || DEFAULT_IMG, text: String(node.text ?? "") };
   const effect = (/** @type {boolean} */ transfer) => ({
     name: facts.name, img: facts.img, type: "base", disabled: false, transfer, description: esc(specText(s, rank)),
     system: { changes }, flags: { "wanderers-path": { built: { template: s.template, rank } } }
   });
   if (mode === "effect") return effect(false);
+  const extra = t.item ? t.item(s.params, valueAt(s, rank), { id: activityId(key || s.template) }) : {};
   return {
     name: facts.name, type: "feat", img: facts.img,
-    system: { description: { value: builtDescription(s, rank, facts) }, type: { value: "feat", subtype: "" } },
-    effects: [effect(true)], flags: { "wanderers-path": { built: { template: s.template, rank } } }
+    system: { description: { value: builtDescription(s, rank, facts) }, type: { value: "feat", subtype: "" }, ...extra },
+    effects: changes.length ? [effect(true)] : [], flags: { "wanderers-path": { built: { template: s.template, rank } } }
   };
 }
 
@@ -341,11 +494,11 @@ export function builderSupported(f) {
   return Number(f.generation) >= 14 && f.system === "dnd5e" && Number.isFinite(major) && major >= 6;
 }
 
-/** Every template for the API and the window: [{ id, label, hint, scales, range, params: [{ key, label, options, free, dflt }] }] (copies, no functions). */
+/** Every template for the API and the window: [{ id, label, hint, scales, range, itemOnly, params: [{ key, label, options, free, dflt }] }] (copies, no functions). */
 export function templateList() {
   return TEMPLATES.map(t => ({
-    id: t.id, label: t.label, hint: t.hint, scales: t.scales, range: [...t.range],
-    params: t.params.map(d => ({ key: d.key, label: d.label, options: d.options ? { ...d.options } : null, free: d.free ?? null, dflt: d.dflt }))
+    id: t.id, label: t.label, hint: t.hint, scales: t.scales, range: [...t.range], itemOnly: !!t.itemOnly,
+    params: t.params.map(d => ({ key: d.key, label: d.label, options: d.options ? { ...d.options } : null, free: d.free ?? d.bad ?? null, dflt: d.dflt }))
   }));
 }
 
@@ -363,7 +516,8 @@ export function preview(raw, rank = 1, maxRanks = Math.max(3, Math.round(rank) |
 /**
  * A stored tree (raw flag data) with a built spec written into one rank slot of one node. Pure: returns a new object.
  *   - the node's grant mode becomes `mode` ("item" or "effect");
- *   - "scale" nodes use slot 1 only; "replace" nodes take slots 1 to max ranks, and a new slot can only follow the existing ones.
+ *   - "scale" nodes use slot 1 only; "replace" nodes take slots 1 to max ranks, and a new slot can only follow the existing ones;
+ *   - item-only templates need mode "item"; "Described in the talent's text" sets (or clears) the node's `automation`.
  * @param {unknown} rawTree @param {string} nodeId @param {number} slot 1-based
  * @param {unknown} rawSpec @param {"item" | "effect"} mode
  * @returns {{ ok: true, tree: Record<string, any> } | { ok: false, error: string }}
@@ -372,6 +526,8 @@ export function withBuiltSlot(rawTree, nodeId, slot, rawSpec, mode) {
   if (!isObj(rawTree) || !Array.isArray(rawTree.nodes)) return { ok: false, error: "That tree can't be read." };
   if (mode !== "item" && mode !== "effect") return { ok: false, error: "Choose whether the talent grants an effect or an item." };
   const spec = normalizeSpec(rawSpec); if (!spec) return { ok: false, error: "Choose a template." };
+  const t = /** @type {Template} */ (templateOf(spec.template));
+  if (t.itemOnly && mode !== "item") return { ok: false, error: `${t.label} makes a feature item: choose "A feature item".` };
   const tree = structuredClone(rawTree);
   const node = tree.nodes.find((/** @type {any} */ n) => isObj(n) && n.id === nodeId);
   if (!node) return { ok: false, error: "That talent isn't in the tree." };
@@ -386,5 +542,11 @@ export function withBuiltSlot(rawTree, nodeId, slot, rawSpec, mode) {
   if (s > ranks.length + 1) return { ok: false, error: `Fill rank slot ${ranks.length + 1} first.` };
   ranks[s - 1] = { built: spec };
   node.grant = { ...g, mode, perRank, ranks };
+  // "Described in the talent's text": the automation key goes on the node (its data is kept while the key stays the same).
+  if (t.describe) {
+    const k = spec.params.automation ?? "";
+    const old = isObj(node.automation) ? node.automation : null;
+    node.automation = k ? { kind: "external", key: k, data: old?.key === k && isObj(old.data) ? old.data : {} } : null;
+  }
   return { ok: true, tree };
 }

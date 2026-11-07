@@ -4,6 +4,7 @@
  * vendor/wanderers-core/ and is never edited by hand. Importing this file calls nothing in Foundry; `leader.start()` runs in "ready".
  */
 import { createFeatures, createSettings, createLogger, createLeader } from "../vendor/wanderers-core/foundry/index.mjs";
+import { createAutomationRegistry } from "./automation-model.mjs";
 import { records } from "../vendor/wanderers-core/index.mjs";
 import { TITLE, ID, HOOKS } from "./const.mjs";
 import { REQUESTS, NOTICE_HOOK } from "./requests-model.mjs";
@@ -45,3 +46,6 @@ export const { log, warn } = createLogger(ID);
 
 /** The one writer. Hook names it may broadcast: notices and our public hooks. */
 export const leader = createLeader({ id: ID, log, requests: REQUESTS, hooks: [NOTICE_HOOK, HOOKS.learned, HOOKS.respec] });
+
+/** External automation handlers (`api.registerAutomation`): stored, never invoked in this version (automation-model.mjs). */
+export const AUTOMATIONS = createAutomationRegistry();

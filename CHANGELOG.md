@@ -2,6 +2,33 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.4.0
+
+Part B of the feature builder: extra damage dice, uses per rest, granted spells, and talents described in their own text with an optional external automation key.
+
+- **Extra damage die** (effect or item): +Xd4–d12 of a damage type on weapon attacks (melee and ranged), melee or ranged weapon attacks only, spell attacks, or all of them. Changes `system.rolls.damage.<mwak|rwak|msak|rsak>.bonus` add `Xd<die>[type]` (dnd5e 6.0.6 has no single key for every attack; the `system.bonuses.*.damage` keys are shimmed legacy keys and are not used). X scales with the rank.
+- **Uses per rest** (feature item): a feat with `system.uses` (max X, recovered in full after a short or long rest) and one activity that spends one use (`itemUses`): utility (nothing to roll), heal (a formula; hit points or temporary hit points; the character or one creature touched) or damage (a formula and a damage type). Takes an action, a bonus action, a reaction or no set time.
+- **Grant a spell** (feature item): a feat with a cast activity (`spell.uuid`), cast without a spell slot X times per short or long rest (spending the feat's uses) or at will; optional casting ability; listed in the spellbook or not (`spell.spellbook`). dnd5e makes and removes its own cached copy of the spell on the character. The builder's spell picker takes a dropped spell or a pasted UUID and checks it against the compendium index (or the world's items).
+- **Described in the talent's text** (feature item): a feat whose description is the talent's text only. An optional automation key is stored on the talent (`automation: { kind: "external", key, data }`).
+- **`api.registerAutomation(key, handler)`** (experimental): stores a handler for an automation key. Nothing invokes handlers in this version; health lists the registered keys and the talents waiting on one.
+- **Grant engine:** activities get a stable 16-character id from the grant key, so a rank change updates the same item in place: `system.uses.max` and the activity's data (formulas, the spell) are rewritten, spent uses are kept, the cached spell stays. Item-only templates grant nothing in effect mode (the builder always picks "feature item" for them; health flags a hand-edited tree).
+- Health: item-only templates on effect-mode talents, granted spells whose UUID points at nothing, the Automation section.
+
+### Untested in Foundry
+
+- [ ] Build window: choosing *Uses per rest*, *Grant a spell* or *Described in the talent's text* hides the effect / item choice and saves mode "item"; the fields follow the "When used" and "Cast" choices; switching templates resets the fields.
+- [ ] Extra damage die (weapon attacks, 1d6 fire, scale 3 ranks): rank 1 adds 1d6[fire] to a melee and a ranged weapon attack's damage roll; rank 2 → 2d6 (same effect id); spell attacks unaffected; the "spell attacks" and "all" choices on a spell attack.
+- [ ] Uses per rest, utility, 2 uses, short rest: the feat shows 2/2 uses; using it spends one (no roll card errors); a short rest restores it; a long rest too.
+- [ ] Uses per rest, heal 1d8 + @prof on self: using it rolls healing and spends a use; "one creature touched" shows touch range and a creature target; temporary hit points apply as temp HP.
+- [ ] Uses per rest, damage 2d6 thunder, reaction: the activity rolls damage with the type, spends a use.
+- [ ] Rank up a uses talent (X 1/2/3) after spending a use: same item id, max goes up, spent stays; the activity id is unchanged (check `system.activities` keys).
+- [ ] Grant a spell: drop a spell from a compendium into the picker (name shows with a check mark); paste a UUID; paste a non-spell item's UUID (says it isn't a spell, Save disabled); a nonsense UUID; a spell from a world item.
+- [ ] Learn a granted-spell talent (2 per long rest, spellbook yes): the feat appears, dnd5e creates the cached spell, it is listed in the spellbook's item section; casting it spends a feat use and no slot; a long rest restores the uses. "Spellbook no": not listed; "at will": no uses, casts freely.
+- [ ] Rank up the granted-spell talent: same feat, same cached spell (no duplicate), more uses. Refund: the feat and its cached spell are removed. Change the spell in the builder: the next reconcile replaces the feat and dnd5e swaps the cached spell.
+- [ ] Described in the talent's text with key `test.key`: a feat with only the talent's text; the journal flag's node has `automation: { kind: "external", key: "test.key", data: {} }`; clearing the key clears it.
+- [ ] `game.modules.get("wanderers-path").api.registerAutomation("test.key", () => {})` returns true; health › Automation lists the key; a talent naming an unregistered key is listed as waiting; the handler is never called.
+- [ ] Health: a hand-edited item-only spec on an effect-mode talent shows the "bad" line; a granted spell with a deleted source shows the warning.
+
 ## 0.3.0
 
 A Talents page on Wanderer's Toolkit's character sheet, and part A of the feature builder: talents can now grant effects built from plain-language templates, whose values scale with the rank.

@@ -6,7 +6,7 @@
  */
 import { registerOpenKeybinding, registerWindowPlacement } from "../vendor/wanderers-core/foundry/index.mjs";
 import { ID, TITLE, HOOKS } from "./const.mjs";
-import { F, S, RECORDS, log, warn } from "./core.mjs";
+import { F, S, RECORDS, AUTOMATIONS, log, warn } from "./core.mjs";
 import * as Trees from "./trees.mjs";
 import * as Path from "./path.mjs";
 import * as Health from "./health.mjs";
@@ -55,7 +55,16 @@ export const API = {
   /** Opens the GM's Settings window (rules, health, Remove data). */
   settings: () => SetWin.openSettings(),
   /**
-   * The feature builder (part A): `templates()` (every template, plain data), `preview(spec, rank?, maxRanks?)` ({ ok, issues, text,
+   * Experimental: stores `handler` for the automation `key` that talents name (`automation: { kind: "external", key, data }`, set by the
+   * builder's "Described in the talent's text"). **Nothing invokes handlers in this version**; health lists the registered keys and the
+   * talents waiting on one. Returns whether it was stored. Undefined when Talents is off.
+   */
+  get registerAutomation() {
+    if (!F.on("talents")) return undefined;
+    return (/** @type {unknown} */ key, /** @type {unknown} */ handler) => { const ok = AUTOMATIONS.register(key, handler); if (ok) log(`automation registered: ${String(key).trim()}`); return ok; };
+  },
+  /**
+   * The feature builder (parts A and B): `templates()` (every template, plain data), `preview(spec, rank?, maxRanks?)` ({ ok, issues, text,
    * line, changes, spec }), `open()` (GM: the Build a talent effect window). Undefined when the feature is off.
    */
   get builder() {

@@ -2,7 +2,7 @@
   "id": "wanderers-path",
   "title": "Wanderer's Path",
   "description": "Customizable talent trees and spec boards for dnd5e. The GM builds the boards; each character spends points on them. Ships with no talent content: your boards live in your world.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "authors": [
     {
       "name": "cocoomg11"
@@ -48,7 +48,7 @@
   ],
   "url": "https://github.com/cocoomg11/wanderers-path",
   "manifest": "https://github.com/cocoomg11/wanderers-path/releases/latest/download/module.json",
-  "download": "https://github.com/cocoomg11/wanderers-path/releases/download/v0.3.0/module.zip",
+  "download": "https://github.com/cocoomg11/wanderers-path/releases/download/v0.4.0/module.zip",
   "bugs": "https://github.com/cocoomg11/wanderers-path/issues",
   "license": "LICENSE",
   "readme": "README.md",

@@ -117,3 +117,5 @@
 .wp-builder-window .wp-preview h3 { margin: 0 0 4px; font-size: 14px; border: 0; }
 .wp-builder-window .wp-preview p { margin: 0; font-weight: bold; }
 .wp-builder-window .wp-warn { color: var(--wc-warn, #e0a030); }
+.wp-builder-window .wp-ok { color: var(--wc-ok, #3fa03f); }
+.wp-builder-window .wp-drop { padding: 6px; border: 1px dashed var(--wc-border, #888); border-radius: 4px; }
