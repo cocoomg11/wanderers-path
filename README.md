@@ -2,7 +2,7 @@
 
 Customizable talent trees and spec boards for the dnd5e system in [Foundry VTT](https://foundryvtt.com). The GM builds the boards (the base shape, the nodes, what each node grants); each character spends points on them.
 
-**Status: in development.** Version 0.4.0: trees from your compendium, the classic tiered talent window, learning and refunds through the GM, the grant engine (learned talents give the character copies of the items or effects their nodes point to; refunds take them back), a Talents page on Wanderer's Toolkit's character sheet, and the feature builder (talent effects and features built from plain-language templates: bonuses, proficiencies, defenses, extra damage dice, uses per rest, granted spells). Later versions add the tree editor and the board layout. What changed in each version: [CHANGELOG](CHANGELOG.md).
+**Status: in development.** Version 0.5.0: trees from your compendium, the classic tiered talent window, learning and refunds through the GM, the grant engine (learned talents give the character copies of the items or effects their nodes point to; refunds take them back), a Talents page on Wanderer's Toolkit's character sheet, and the feature builder (talent effects and features built from plain-language templates). Later versions add the tree editor and the board layout. What changed in each version: [CHANGELOG](CHANGELOG.md).
 
 ## No content included
 
@@ -20,14 +20,27 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 
 `https://github.com/cocoomg11/wanderers-path/releases/latest/download/module.json`
 
-## Setting up (0.1.0)
+## Setting up a tree
 
-1. Create a world compendium of **Journal Entries** (e.g. "Talent trees"), set its Player ownership to **Observer**, and choose it in **Configure Settings › Wanderer's Path › Open settings › Tree compendium**.
-2. Each tree is one Journal Entry with its data in the flag `flags.wanderers-path.tree` (the editor comes in a later version). Shape: `{ v: 1, id, name, layout: "tiered", assign: { classes: ["<class identifier>"], subclasses: [] }, unlockLevel, tiered: { columns: 3, tierSize: 5 }, nodes: [{ id, name, text, tier, col, maxRanks, prereqs: [{ node, ranks }], gate: { level }, excludes: [], grant: { mode: "item" | "effect" | "none", perRank: "scale" | "replace", ranks: [{ uuid }] } }] }`. A grant's `uuid` is an Item (compendium or world) or an Active Effect; "scale" keeps one copy and records the rank, "replace" uses one document per rank.
-3. Characters open their talents from the sheet's header menu (Talents) or the *Open talents* key binding.
-4. (0.3.0, Foundry 14 and dnd5e 6) To give a talent a built effect instead of a document: **Open settings › Build a talent effect**. Pick the tree, the talent, the rank slot, whether it grants an effect or a feature item, and a template (Armor Class, speed, senses, roll bonuses, advantage, proficiency or expertise, resistances and immunities, ability scores, hit points, critical range). X scales as *X at rank 1 + added per rank × (rank − 1)*; the preview shows each rank. Save writes `{ built: { template, params, base, step } }` into the node's rank slot; characters get it on their next change or with *Refresh granted items*.
-5. (0.4.0) More builder templates. *Extra damage die* adds +Xd(die) of a damage type to weapon attacks, spell attacks or both (an effect or an item). Three make a **feature item** only: *Uses per rest* (X uses, back after a short or long rest; using it spends one: nothing to roll, healing, or damage with your formula), *Grant a spell* (drop a spell, or paste its UUID; cast without a spell slot X times per rest or at will, listed in the spellbook or not; dnd5e keeps a copy of the spell on the character) and *Described in the talent's text* (a feature that only carries the talent's text, with an optional automation key that other modules may register; nothing runs it in this version). A rank change updates the uses and formulas of the same item; spent uses are kept.
-6. With Wanderer's Toolkit 2.3.0 or later (its character sheet on), characters with a tree get a **Talents** bookmark on the toolkit sheet: points, spent per tree, a small tree preview, what their talents give, recent changes and *Open full window*.
+The full guide, with an example tree and every field, is **[docs/trees.md](docs/trees.md)**. In short:
+
+1. **Compendium:** create a world compendium of **Journal Entries**, set its Player ownership to **Observer**, and choose it in **Configure Settings › Wanderer's Path › Open settings › Tree compendium**.
+2. **Tree data:** each tree is one Journal Entry with its data in `flags.wanderers-path.tree`: `{ v: 1, id, name, layout: "tiered", assign: { classes, subclasses }, unlockLevel, tiered: { columns, tierSize }, nodes: [...] }`. Each talent (node) has an id, a tier and column, ranks, optional prereqs, gates and exclusions, and a `grant`.
+3. **What a talent gives:** link an Item or Active Effect by UUID in `grant.ranks` (`mode: "item"` or `"effect"`; `perRank: "scale"` keeps one copy, `"replace"` uses one document per rank), or use **Open settings › Build a talent effect** (Foundry 14 and dnd5e 6) to build one from a template: AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points, critical range, extra damage dice, uses per rest, a granted spell, or a feature described in the talent's text. X scales with the rank.
+4. **Who gets it:** characters with a class or subclass identifier in the tree's `assign`, plus trees a GM adds by hand in the talent window's GM box. A tree opens at its unlock level.
+5. **Points:** one pool per character, *Points per level* from *First point at level* on (default 1 from level 2: 19 at level 20), plus GM awards. Tiers count points spent in that tree. Learning needs a connected GM.
+6. **Respec:** a GM refunds for free (right-click, *Reset tree*, *Free respec*); players only with *Players may refund* on.
+
+Characters open their talents from the sheet's header menu (**Talents**), the *Open talents* key binding (no key by default) or, with Wanderer's Toolkit 2.3.0 or later (its sheet on), the **Talents** bookmark on the toolkit sheet.
+
+## Troubleshooting
+
+Run **Open settings › Health check** (or the check in the Wanderer's Satchel). Lines that can be fixed safely have a **Fix** button (*Refresh granted items*, *Refund orphans*); after you confirm, the fix runs on the GM client that applies changes and the check runs again. The table in [docs/trees.md](docs/trees.md#troubleshooting) says what each line means and what to do.
+
+- **Players see no trees:** the compendium's Player ownership must be Observer, and the tree's `assign` must match the character's class identifier (or add the tree by hand).
+- **Learn does nothing:** a GM must be connected.
+- **Granted items didn't change after editing a source:** click *Refresh granted items*.
+- **Remove everything:** **Open settings › Remove Wanderer's Path data** (picks, granted items and effects, settings; your tree compendium is never deleted).
 
 ## Public API and hooks
 
@@ -42,7 +55,7 @@ Not released yet. Once it is, in Foundry's **Add-on Modules › Install Module**
 | `trees()` | experimental | Promise of the published trees (copies, normalized). Undefined when Talents is off. |
 | `points(actor)` | experimental | Promise of `{ level, fromLevel, awards, total, spent, available, byTree }`, or null when you can't view the actor. Undefined when Talents is off. |
 | `refresh(actor?)` | experimental | GM: makes granted items and effects match the learned talents again, re-copying those whose source changed (Actor, id or UUID; none or `"all"`: every character). Returns whether the request was sent. Undefined when Talents is off. |
-| `healthReport({ timeoutMs })` | experimental | Promise of the read-only health report `[{ title, lines: [{ level, text }] }]` (GM; players get `[]`). |
+| `healthReport({ timeoutMs })` | experimental | Promise of the read-only health report `[{ title, lines: [{ level, text, fix? }] }]` (GM; players get `[]`). `timeoutMs` is the per-section limit (1 s – 5 min, default 20 s). A `fix` is core's `{ label, confirm, run }`; `run()` resolves once the GM client that applies changes has finished (or after 30 s). |
 | `cleanup` | experimental | GM (players get a warning and null): `plan()`, `dryRun()`, `remove(pick, "REMOVE")` (picks, granted items and effects, settings; the tree compendium is never deleted). |
 | `settings()` | experimental | GM: opens the Settings window. |
 | `builder` | experimental | The feature builder (feature *Feature builder*; undefined when off): `templates()` lists the templates as plain data (`{ id, label, hint, scales, range, itemOnly, params }`; `itemOnly` templates make a feature item only); `preview(spec, rank?, maxRanks?)` returns `{ ok, issues, text, line, changes, spec }` for a spec `{ template, params, base, step }` (X = base + step × (rank − 1)); `open()` (GM) opens the *Build a talent effect* window. |

@@ -2,6 +2,25 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.5.0
+
+Polish: health fixes in Path's own Settings window, a setup guide, and a check for hand-edited built slots.
+
+- **Fix buttons in the Settings window:** health lines that have a safe fix (*Refresh granted items*, *Refund orphans*) now show a button in **Open settings › Health check**, as the Satchel already did. A click asks for confirmation, runs the fix (it waits for the GM client that applies changes, up to 30 s), shows the result above the report and runs the check again. GM only.
+- **Health:** a built slot whose `base` or `step` isn't a number (or isn't a whole number) was replaced silently by the normalizer; it now gets a warning line naming the value that is used instead.
+- **Docs:** new [docs/trees.md](docs/trees.md), the setup guide: the tree compendium, a tree's data with a generic example and every field, linking items and effects by UUID, *Build a talent effect*, who gets a tree, points, refunds and respec, and a troubleshooting table (health line → what to do). The README has a short *Setting up a tree* and *Troubleshooting* section, and the API table documents the `fix` on health lines.
+- **Cleanup:** checked that *Remove Wanderer's Path data* covers everything the module writes (picks on actors and unlinked tokens, tagged granted items and effects, every setting including the client window placements for the talent, Settings and builder windows); a test now pins it.
+
+### Untested in Foundry
+
+- [ ] Open settings › Run check with a granted effect deleted: the out-of-step line has a *Refresh granted items* button; Cancel in the confirm does nothing; Yes shows "Working…", then "Refresh granted items: done." above a report with everything in step.
+- [ ] Same from a second GM tab that isn't the one applying changes; and with the applying GM tab closed: the result says the GM client hasn't answered yet after about 30 s.
+- [ ] *Refund orphans* button after unpublishing a tree: the re-check shows no orphan line.
+- [ ] Clicking Fix twice quickly runs it once.
+- [ ] A built AC slot hand-edited to `base: "x"`: Health › Trees shows the "isn't a number: 1 is used" warning; the talent still grants +1 AC.
+- [ ] Remove data with settings ticked resets the window placements (talent window, Settings, builder open at their default spots after the reload).
+- [ ] Follow docs/trees.md from an empty world: the console snippet publishes the example tree and a fighter sees it.
+
 ## 0.4.1
 
 Fixes from the live test of 0.4.0.

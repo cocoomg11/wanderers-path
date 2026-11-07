@@ -4,14 +4,15 @@
  * and the Satchel's Settings button. Untested in Node: needs a live client.
  */
 import { RememberedWindow } from "../vendor/wanderers-core/foundry/index.mjs";
-import { UI_CLASSES, esc, tabRows, convert, statusLines, CONFIRM_WORD } from "../vendor/wanderers-core/index.mjs";
+import { UI_CLASSES, esc, tabRows, convert, statusLine, CONFIRM_WORD } from "../vendor/wanderers-core/index.mjs";
 import { ID, TITLE } from "./const.mjs";
 import { F, S } from "./core.mjs";
 import * as Health from "./health.mjs";
 import * as Cleanup from "./cleanup.mjs";
 import { openBuilder } from "./builder.mjs";
+import { reportHTML, fixAt, fixNotice } from "./settings-model.mjs";
 
-const { ApplicationV2 } = foundry.applications.api;
+const { ApplicationV2, DialogV2 } = foundry.applications.api;
 /** @type {SettingsWindow | null} */
 let app = null;
 
@@ -24,9 +25,11 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     classes: ["wp-window", "wp-settings-window", ...UI_CLASSES],
     window: { title: `${TITLE} · Settings`, icon: "fa-solid fa-route", resizable: true },
     position: { width: 560, height: 640 },
-    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove, builder: () => { openBuilder(); } }
+    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove, fix: SettingsWindow.#onFix, builder: () => { openBuilder(); } }
   };
   /** @type {any[] | null} */ report = null;
+  /** The key ("s:l") of the fix that is running, or null. @type {string | null} */ busy = null;
+  /** The last fix's result line, shown above the report. @type {{ level: string, text: string } | null} */ fixed = null;
 
   async _renderHTML() {
     const div = document.createElement("div"); div.className = "wp-scroll";
@@ -48,7 +51,7 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
         <div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="save"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save</button></div></div></section>
       ${F.on("builder") ? `<section class="wc-panel"><div class="wc-panel-head"><h3>Feature builder</h3></div><div class="wc-panel-body"><p class="wc-hint">Give a published talent a built effect: AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points or critical range, scaling with its rank.</p>
         <div class="wc-row"><button type="button" class="wc-btn" data-action="builder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Build a talent effect</button></div></div></section>` : ""}
-      <section class="wc-panel"><div class="wc-panel-head"><h3>Health check</h3></div><div class="wc-panel-body">${this.report ? this.report.map(s => `<h4>${esc(s.title)}</h4>${statusLines(s.lines)}`).join("") || `<p class="wc-hint">Nothing to report.</p>` : `<p class="wc-hint">Not run yet.</p>`}
+      <section class="wc-panel"><div class="wc-panel-head"><h3>Health check</h3></div><div class="wc-panel-body">${this.fixed ? `<ul class="wc-lines">${statusLine(this.fixed.level, this.fixed.text)}</ul>` : ""}${reportHTML(this.report, { busy: this.busy })}
         <div class="wc-row"><button type="button" class="wc-btn" data-action="health"><i class="fa-solid fa-stethoscope" aria-hidden="true"></i> ${this.report ? "Run again" : "Run check"}</button></div></div></section>
       <section class="wc-panel"><div class="wc-panel-head"><h3>Remove Wanderer's Path data</h3></div><div class="wc-panel-body">
         ${rows.map(r => `<label class="wp-check"><input type="checkbox" name="rm-${esc(r.key)}"${r.ticked && r.count ? " checked" : ""}${Cleanup.REMOVABLE.includes(r.key) && r.count ? "" : " disabled"}> ${esc(r.text)}</label>`).join("")}
@@ -76,7 +79,27 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
 
   static async #onHealth() {
     const self = /** @type {SettingsWindow} */ (/** @type {unknown} */ (this));
-    self.report = await Health.report(); self.render();
+    self.fixed = null; self.report = await Health.report(); self.render();
+  }
+
+  /**
+   * A line's Fix button (GM click): confirm (DialogV2), run the fix (ours wait for the GM client that applies changes, see health.mjs
+   * `runAndWait`), then run the report again so the window shows the new state. @param {PointerEvent} _ev @param {HTMLElement} target
+   */
+  static async #onFix(_ev, target) {
+    const self = /** @type {SettingsWindow} */ (/** @type {unknown} */ (this));
+    if (!game.user?.isGM || self.busy) return;
+    const key = String(target?.dataset?.fix ?? ""); const f = fixAt(self.report, key);
+    if (!f) { ui.notifications.warn(`${TITLE}: that fix is no longer offered; run the check again.`); return; }
+    if (f.confirm) {
+      const ok = await DialogV2.confirm({ classes: ["wp-window", ...UI_CLASSES], window: { title: f.label }, content: `<p>${esc(f.confirm)}</p>`, rejectClose: false });
+      if (!ok) return;
+    }
+    self.busy = key; self.render();
+    try { self.fixed = fixNotice(f.label, await f.run()); }
+    catch (e) { console.warn(`${ID} | fix`, e); self.fixed = { level: "warn", text: `${f.label}: failed (${String(/** @type {any} */ (e)?.message ?? e).slice(0, 120)}).` }; }
+    try { self.report = await Health.report(); } catch (e) { console.warn(`${ID} | health`, e); }
+    self.busy = null; self.render();
   }
 
   static async #onRemove() {

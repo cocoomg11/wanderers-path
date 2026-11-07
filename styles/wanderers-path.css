@@ -119,3 +119,4 @@
 .wp-builder-window .wp-warn { color: var(--wc-warn, #e0a030); }
 .wp-builder-window .wp-ok { color: var(--wc-ok, #3fa03f); }
 .wp-builder-window .wp-drop { padding: 6px; border: 1px dashed var(--wc-border, #888); border-radius: 4px; }
+.wp-window .wp-fix { margin-left: 0.4rem; flex: 0 0 auto; }

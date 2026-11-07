@@ -416,6 +416,28 @@ export function specIssues(raw, { maxRanks = 1 } = {}) {
   return out;
 }
 
+/**
+ * What the normalizer quietly replaced in a stored spec (plain text, [] when nothing): a scaling template's `base` / `step` that isn't
+ * a number becomes the template's default, and a fraction is rounded. The grant still builds (with the replaced value); health warns so
+ * a hand-edited tree doesn't hide the change.
+ * @param {unknown} raw @returns {string[]}
+ */
+export function specWarnings(raw) {
+  if (!isObj(raw)) return [];
+  const s = normalizeSpec(raw); if (!s) return [];
+  const t = /** @type {Template} */ (templateOf(s.template));
+  if (!scalesFor(t, s.params)) return [];
+  const out = [];
+  for (const [k, label] of /** @type {const} */ ([["base", "X at rank 1"], ["step", "Added per rank"]])) {
+    if (!(k in raw) || raw[k] === undefined || raw[k] === null) continue;
+    const v = raw[k];
+    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+    if (!Number.isFinite(n)) out.push(`${label} "${String(v).slice(0, 20)}" isn't a number: ${s[k]} is used.`);
+    else if (Math.round(n) !== n) out.push(`${label} ${n} isn't a whole number: ${s[k]} is used.`);
+  }
+  return out;
+}
+
 /** The plain sentence a spec gives at a rank ("" when it can't be built). @param {unknown} raw @param {number} [rank] */
 export function specText(raw, rank = 1) {
   const s = normalizeSpec(raw); if (!s || specIssues(s, { maxRanks: rank }).length) return "";

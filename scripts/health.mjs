@@ -17,7 +17,7 @@ import { hasAdvancement } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
 import * as SheetPage from "./sheet-page.mjs";
 import { pageStatus } from "./sheet-page-model.mjs";
-import { specIssues, templateOf } from "./builder-model.mjs";
+import { specIssues, specWarnings, templateOf } from "./builder-model.mjs";
 
 /** Default per-section limit when the caller gives none; the caller's own (e.g. the Satchel's) is clamped to 1 s – 5 min. */
 export const REPORT_TIMEOUT_MS = 20000;
@@ -100,6 +100,7 @@ export async function report({ timeoutMs } = {}) {
         for (const r of built) {
           const raw = /** @type {any} */ (r).built;
           const i = specIssues(raw, { maxRanks: n.maxRanks }); if (i.length) { add("bad", `${t.name} › ${n.name}: ${i[0]}`); continue; }
+          for (const w of specWarnings(raw)) add("warn", `${t.name} › ${n.name}: ${w}`);
           const tpl = templateOf(raw?.template);
           if (tpl?.itemOnly && n.grant.mode !== "item") add("bad", `${t.name} › ${n.name}: ${tpl.label} makes a feature item, but the talent grants an effect: it grants nothing.`);
           if (tpl?.id === "spell" && exists(String(raw.params?.spell ?? "")) === false) add("warn", `${t.name} › ${n.name}: the granted spell's UUID points at nothing.`);
