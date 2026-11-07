@@ -34,7 +34,7 @@ jobs:
   checks:
     needs: probe
     if: needs.probe.outputs.core == 'true'
-    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.3.1
+    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.5.2
     # with:
     #   lint: false      # while the module still has lint errors to fix
     #   types: false     # while the module isn't JSDoc-clean yet
