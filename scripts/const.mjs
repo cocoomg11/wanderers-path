@@ -6,5 +6,9 @@ export { esc, plural } from "../vendor/wanderers-core/index.mjs";
 
 export const ID = "wanderers-path";
 export const TITLE = "Wanderer's Path";
-/** Hooks we fire (see README, Public API and hooks). */
-export const HOOKS = { ready: `${ID}.ready` };
+/** Hooks we fire (see README, Public API and hooks). `learned` / `respec` carry ids only. */
+export const HOOKS = { ready: `${ID}.ready`, learned: `${ID}.learned`, respec: `${ID}.respec` };
+/** Where a character's picks are stored: `flags.wanderers-path.picks`. */
+export const PICKS_FLAG = "picks";
+/** Where a published tree is stored on its JournalEntry: `flags.wanderers-path.tree`. */
+export const TREE_FLAG = "tree";
