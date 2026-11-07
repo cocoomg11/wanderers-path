@@ -1,4 +1,5 @@
 {
+  "$comment": "JSDoc type check of the module scripts against core's shared base. Tests are left out: they feed wrong types on purpose.",
   "extends": "./vendor/wanderers-core/config/tsconfig.base.json",
-  "include": ["scripts/**/*.mjs", "vendor/wanderers-core/config/foundry-globals.d.ts"]
+  "include": ["scripts/**/*.mjs", "vendor/wanderers-core/config/foundry-globals.d.ts", "types/**/*.d.ts"]
 }

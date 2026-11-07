@@ -11,31 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  # A module made from the template must have adopted wanderers-core (TEMPLATE.md, Part B). The template repo itself has no
-  # vendored copy, so its own run is skipped; any other repo without wanderers-core.lock.json fails here.
-  probe:
-    runs-on: ubuntu-latest
-    outputs:
-      core: ${{ steps.p.outputs.core }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: p
-        run: |
-          if [ -f wanderers-core.lock.json ]; then echo "core=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          echo "core=false" >> "$GITHUB_OUTPUT"
-          if [ "$GITHUB_REPOSITORY" != "cocoomg11/wanderers-module-template" ]; then
-            echo "::error title=wanderers-core::no wanderers-core.lock.json: adopt core first (TEMPLATE.md, Part B)."
-            exit 1
-          fi
-          echo "Template repository: nothing vendored, checks skipped."
-
-  # Core's reusable workflow: fails when vendor/wanderers-core differs from its pin, then runs npm run check, lint, types and test.
-  # Pinned to a core release tag (not @main); Dependabot proposes bumps. See docs/module-ci.md in the core repo.
+  # Core pin check (vendor/wanderers-core matches wanderers-core.lock.json and the published release), syntax, lint, types, tests.
+  # Pinned to a core release tag (not @main); keep it equal to the vendored core version. Dependabot proposes bumps.
   checks:
-    needs: probe
-    if: needs.probe.outputs.core == 'true'
-    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.3.1
-    # with:
-    #   lint: false      # while the module still has lint errors to fix
-    #   types: false     # while the module isn't JSDoc-clean yet
-    #   remote: false    # skip checking the lock against the published release
+    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.6.0
+    with:
+      types: true # JSDoc type check (npm run types); keep scripts/ JSDoc-clean

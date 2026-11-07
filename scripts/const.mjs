@@ -4,7 +4,7 @@
  */
 export { esc, plural } from "../vendor/wanderers-core/index.mjs";
 
-export const ID = "my-module";
-export const TITLE = "My Module";
+export const ID = "wanderers-path";
+export const TITLE = "Wanderer's Path";
 /** Hooks we fire (see README, Public API and hooks). */
 export const HOOKS = { ready: `${ID}.ready` };
