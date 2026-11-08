@@ -2,6 +2,52 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.6.0
+
+The GM tree editor: make and change talent trees without touching data by hand.
+
+- **Tree editor** (feature *Tree editor*, on by default; GM only): **Open settings › Open the tree editor**, `api.editor.open(treeId?)`, or the Satchel's Settings button. A dark, classic-MMO window in three columns:
+  - **Trees:** every published tree and every draft, with its state (*Published*, *Draft*, *Draft (same)*, *Draft (changed)*). **New tree…** (asks for a name; the id is made from it and never changes), **Duplicate**, **Delete** (asks first; deleting a published tree says which characters have points in it and offers *Refund orphans* right after).
+  - **Add talents:** search the world's items and the world's item compendiums and drag one onto an empty spot of the grid: a talent named after it, with its image, granting it. Items and active effects can also be dropped straight from Foundry's sidebar or any compendium window. Items with dnd5e advancement get a warning (advancement doesn't run on grants).
+  - **Grid (tiered):** tier rows × columns with the points each tier needs; empty spots take a drop or a click (a blank talent). Drag talents between spots (a taken spot swaps). **+ Tier / − Tier**, **Link mode** (select a talent, then click the talents it requires; again to unlink; Escape leaves), **Undo** (the last 20 changes; Ctrl+Z). Requirement arrows as in the talent window; talents with a blocking problem carry a red mark.
+  - **Inspector:** the selected talent's name, image (file picker), text, max ranks, points a rank, tier and column, keystone; what it grants (an item, an effect or nothing; one grant for every rank, or a different one per rank) with one drop slot per rank, **Build…** (the feature builder, on that slot) and a clear button; requirements (chips with the ranks needed, an add list, or link mode), points in the tree and character level gates, and talents it can't be learned with (mirrored both ways); **Delete talent** (removes every link to it). With no talent selected it shows the **tree settings**: name, image, layout (tiered; a board tree shows "Board editing comes later"), columns, tiers, points per tier, opens at level, *Offered to characters*, and who gets it: classes and subclasses picked from your class items (read from the compendium indexes) or typed as identifiers.
+  - **Problems** are listed under the grid as you edit (the health check's tree rules plus built slots).
+- **Drafts and Publish:** **Save draft** keeps the edits in a GM-only journal (core's store, in the hidden *Module data* folder; at most 50 drafts). **Publish** checks the tree first and refuses while there are errors (loops, unreachable tiers, missing documents, bad built slots), shows the warnings and what changes (talents added, changed, removed; characters with ranks in removed talents), then writes the tree and a readable *Talents* page to its Journal Entry in the tree compendium. No compendium chosen yet: it offers to create a world compendium *Talent trees* (players: Observer) and choose it. A locked compendium is unlocked only after you agree, and locked again afterwards. Publishing drops the draft. **Discard draft** goes back to the published tree. Closing or switching trees with unsaved changes asks first. The window says when a draft differs from the published tree, and when the published tree changed since the draft started.
+- **Feature builder:** now opened from the editor's **Build…** on a rank slot; **Use for this rank** puts the built slot into the tree being edited (save and publish it as usual). The builder writes nothing itself; `api.builder.open(treeId?, nodeId?, slot?)` opens the editor there. Trees are written only by the editor's Publish (and Delete).
+- **Trees can be turned off:** a tree's new `enabled` field (missing = on). Off: no character is offered it; a character who already has ranks in it keeps them (and what they grant), shown locked with "The GM has turned this tree off."
+- **Health:** new *Drafts* section: drafts not published yet (info), the drafts journal shared with players (warn), several drafts journals (warn), not filed yet (info).
+- **Cleanup:** new category *Tree drafts* (the drafts journal; unticked by default). The settings reset also covers the editor's window placement and this browser's *Show the Module data folder* switch (new, under Remove data in the Settings window).
+- **API:** `editor` (`open(treeId?)`, `drafts()`); `builder.open` now opens the editor.
+- **Docs:** docs/trees.md and the README lead with the editor; writing a tree from the console is an appendix.
+
+### Untested in Foundry
+
+- [ ] Open settings › Open the tree editor (GM); a player can't open it (`api.editor.open()` warns "GM only"). Feature *Tree editor* off: no button, `api.editor` undefined.
+- [ ] New tree… "Example Tree": a draft "Example Tree" appears in the list with *Draft*; the drafts journal is created in the Module data folder (hidden in the Journal sidebar; *Show the Module data folder* shows it), ownership None.
+- [ ] Type in the search box: the list narrows without losing focus; drag an item from it onto an empty spot: a talent named after it, with its image; the inspector shows it with its rank slot filled.
+- [ ] Drag an item from the Items sidebar, an item from a compendium window and an active effect (from an item's Effects tab) onto spots and onto a rank slot. An item with advancement shows the warning.
+- [ ] Drag a talent onto an empty spot (moves) and onto another talent (swaps), in Chromium and Firefox (buttons are draggable).
+- [ ] Click an empty spot: a blank "New talent" is selected. Edit name, text, ranks, cost, tier/column, keystone; Tab and Enter commit; the grid and arrows follow.
+- [ ] Image file picker for a talent and for the tree.
+- [ ] Link mode: select a talent, click two others: arrows appear; click again: gone; a loop is refused with a notice; Escape leaves link mode. Requirement ranks input clamps to the other's max.
+- [ ] Exclusions: add from the list, shown on both talents; remove with ×.
+- [ ] Per rank "A different one per rank" with 3 ranks: three slots filled in order; clear one: later ones move up.
+- [ ] Build… on a slot: the builder shows "Tree › Talent · rank N" (no tree/talent choice); Use for this rank closes it and the slot shows "Built: …"; Undo removes it again. A spell (Grant a spell) dropped into the builder still works.
+- [ ] Tree settings: classes list shows your class items (SRD and world), adding/removing chips; typing an identifier + Enter adds it; columns/tiers can't be lowered past a talent (notice).
+- [ ] Undo 20 steps; Ctrl+Z outside inputs; the 21st step back isn't there.
+- [ ] Save draft; reload; the draft is still there and marked *Draft (changed)* against the published tree. Close with unsaved changes asks; Cancel keeps the window open.
+- [ ] Publish with a loop or an unreachable tier: refused, problems listed, talents marked. Fix, Publish: confirm lists the changes; the tree flag and the *Talents* page are written to the compendium entry; the draft disappears; a fighter's talent window shows the change at once.
+- [ ] Publish with no compendium chosen: the create offer makes *Talent trees* (Player: Observer; check Configure Ownership), sets it in the settings and publishes there. With a locked compendium: asked to unlock, publishes, the compendium is locked again.
+- [ ] Publish a version without a talent a character has ranks in: the confirm names it; afterwards the health check offers Refund orphans.
+- [ ] Delete a published tree with characters' points in it: the warning names them; Refund orphans offered and works. Delete a never-published draft.
+- [ ] Discard draft goes back to the published tree; on a never-published tree it deletes it.
+- [ ] Turn *Offered to characters* off and publish: characters without ranks lose the tab; one with ranks sees it locked ("The GM has turned this tree off.") and keeps the granted items.
+- [ ] A board tree shows "Board editing comes later"; its settings still save.
+- [ ] Health: *Drafts* lists unpublished drafts; share the drafts journal with a player: warn line. Remove data › Tree drafts deletes the journal (and the Module data folder if empty).
+- [ ] Remove data › settings resets the editor's window placement.
+- [ ] Space and Enter on editor buttons don't pause the game.
+- [ ] The three columns fit in the default 1200 × 780 window; on a screen narrower than 900 px they stack.
+
 ## 0.5.0
 
 Polish: health fixes in Path's own Settings window, a setup guide, and a check for hand-edited built slots.

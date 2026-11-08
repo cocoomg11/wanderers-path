@@ -12,7 +12,7 @@ test("registration has only the Satchel's fields", () => {
   assert.deepEqual(reg.health({ timeoutMs: 5 }), { o: { timeoutMs: 5 } });
   assert.deepEqual(reg.skipSettings, ["a", "b"]);
   assert.deepEqual(reg.debugSetting, { namespace: "wanderers-path", key: "debugLog" });
-  assert.deepEqual(RECORDS, [], "no hidden record settings yet");
+  assert.deepEqual(RECORDS, ["showModuleData"], "the one hidden record: this browser's Module data folder switch (0.6.0)");
 });
 
 test("registerWith: inactive, now and on the ready hook, refusals warn", () => {

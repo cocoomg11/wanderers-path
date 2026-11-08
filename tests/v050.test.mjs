@@ -75,7 +75,8 @@ test("cleanup covers everything Path writes", () => {
     for (const m of s.matchAll(/"wanderers-path": \{ (\w+):/g)) keys.add(m[1]);
     for (const m of s.matchAll(/(\w+): tagFor\(/g)) keys.add(m[1]);
   }
-  assert.deepEqual([...keys].sort(), ["GRANTED_FLAG", "PICKS_FLAG", "TREE_FLAG", "built", "granted"].sort());
+  for (const m of src("scripts/editor.mjs").matchAll(/\[ID\]: \{ \[([A-Z_]+)\]:/g)) keys.add(m[1]);
+  assert.deepEqual([...keys].sort(), ["GRANTED_FLAG", "PAGE_FLAG", "PICKS_FLAG", "TREE_FLAG", "built", "granted"].sort());
   const c = src("scripts/cleanup.mjs");
   assert.match(c, /unsetFlags\(ID, p\.picks/, "picks: the whole namespace on actors");
   assert.match(c, /t\.delta\?\._source\?\.flags\?\.\[ID\]/, "unlinked tokens' actors too");
@@ -84,19 +85,18 @@ test("cleanup covers everything Path writes", () => {
   // window keys path, settings and builder).
   assert.match(c, /changedSettings\(settingValues\(ID\), \{ scopes: \["world", "client"\] \}\)/);
   const keysUsed = scripts.flatMap(f => [...src(`scripts/${f}`).matchAll(/RememberedWindow\(ApplicationV2, \{ moduleId: ID, key: ([^ }]+) \}/g)].map(m => m[1]));
-  assert.deepEqual(keysUsed.sort(), ["BUILDER_KEY", "WINDOW_KEY", "\"settings\""].sort());
+  assert.deepEqual(keysUsed.sort(), ["BUILDER_KEY", "EDITOR_KEY", "WINDOW_KEY", "\"settings\""].sort());
   assert.match(src("scripts/main.mjs"), /registerWindowPlacement\(ID\)/);
   assert.ok(Cleanup.CATEGORIES.some(([k, l]) => k === "settings" && /window placements/.test(l)));
-  // No other documents: no chat messages, no world items, no journal writes but the builder's tree flag.
-  for (const f of scripts) assert.doesNotMatch(src(`scripts/${f}`), /ChatMessage\.(create|implementation)|Item\.create\(|JournalEntry\.create\(|game\.settings\.register\(/, f);
+  // No other documents: no chat messages, no world items; journals only the editor's tree entries (in the tree compendium, kept) and
+  // the drafts store (core's createStore, removed by cleanup's drafts category).
+  for (const f of scripts) assert.doesNotMatch(src(`scripts/${f}`), /ChatMessage\.(create|implementation)|Item\.create\(|game\.settings\.register\(/, f);
+  for (const f of scripts.filter(f => f !== "editor.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /JournalEntry(\.implementation)?\.create\(/, f);
+  assert.match(src("scripts/editor.mjs"), /JournalEntry\.implementation\.create\([^)]*\{ pack: p\.collection \}\)/);
 });
 
-test("0.5.0: version, changelog, docs", () => {
-  const m = JSON.parse(src("module.json"));
-  assert.equal(m.version, "0.5.0");
+test("0.5.0: changelog and README API list (the version and docs headings are checked in the newest version test)", () => {
   assert.match(src("CHANGELOG.md"), /^## 0\.5\.0$[\s\S]*?### Untested in Foundry/m);
-  const docs = src("docs/trees.md");
-  for (const h of ["## 1. The tree compendium", "## 2. A tree's data", "## 3. Linking items and effects", "## 4. Build a talent effect", "## 5. Who gets a tree", "## 6. Points", "## 7. Refunds and respec", "## Troubleshooting"]) assert.ok(docs.includes(h), h);
   const readme = src("README.md");
   assert.match(readme, /docs\/trees\.md/);
   for (const k of ["version", "isReady", "features", "open(actor?)", "trees()", "points(actor)", "refresh(actor?)", "healthReport", "cleanup", "settings()", "builder", "registerAutomation"]) assert.ok(readme.includes(`\`${k}`), k);

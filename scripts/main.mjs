@@ -4,9 +4,9 @@
  * and the `wanderers-path.ready` hook (fired once in `ready`). Everything a tool adds is gated by `F.on(...)`. Talent content is
  * never shipped; it lives in each world's tree compendium.
  */
-import { registerOpenKeybinding, registerWindowPlacement } from "../vendor/wanderers-core/foundry/index.mjs";
+import { registerOpenKeybinding, registerWindowPlacement, hideDataFolder } from "../vendor/wanderers-core/foundry/index.mjs";
 import { ID, TITLE, HOOKS } from "./const.mjs";
-import { F, S, RECORDS, AUTOMATIONS, log, warn } from "./core.mjs";
+import { F, S, RECORDS, AUTOMATIONS, leader, log, warn } from "./core.mjs";
 import * as Trees from "./trees.mjs";
 import * as Path from "./path.mjs";
 import * as Health from "./health.mjs";
@@ -15,7 +15,9 @@ import * as Win from "./window.mjs";
 import * as SetWin from "./settings-window.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
 import * as SheetPage from "./sheet-page.mjs";
-import * as Builder from "./builder.mjs";
+import * as Editor from "./editor.mjs";
+import * as Drafts from "./drafts.mjs";
+import { treeList } from "./draft-model.mjs";
 import { templateList, preview } from "./builder-model.mjs";
 
 let isReady = false;
@@ -71,14 +73,26 @@ export const API = {
   },
   /**
    * The feature builder (parts A and B): `templates()` (every template, plain data), `preview(spec, rank?, maxRanks?)` ({ ok, issues, text,
-   * line, changes, spec }), `open()` (GM: the Build a talent effect window). Undefined when the feature is off.
+   * line, changes, spec }), `open(treeId?, nodeId?, slot?)` (GM: since 0.6.0 the tree editor at that talent; with a slot, the builder on
+   * it). Undefined when the feature is off.
    */
   get builder() {
     if (!F.on("builder")) return undefined;
     return Object.freeze({
       templates: () => templateList(),
       preview: (/** @type {unknown} */ spec, /** @type {number} */ rank = 1, /** @type {number | undefined} */ maxRanks) => clone(preview(spec, rank, maxRanks)),
-      open: () => Builder.openBuilder()
+      open: (/** @type {string | undefined} */ treeId, /** @type {string | undefined} */ node, /** @type {number | undefined} */ slot) => Editor.openEditor(treeId ?? null, { node, slot: node ? slot ?? 1 : undefined })
+    });
+  },
+  /**
+   * The GM tree editor (feature "editor"; undefined when off): `open(treeId?)` opens it (at that tree), `drafts()` (GM; players get a
+   * warning and null) lists every published tree and draft `{ id, name, state, label, stale, published, draft }`.
+   */
+  get editor() {
+    if (!F.on("editor")) return undefined;
+    return Object.freeze({
+      open: (/** @type {string | undefined} */ treeId) => Editor.openEditor(treeId ?? null),
+      drafts: () => gmOnly(async () => clone(treeList(await Trees.loadTrees(), Drafts.read())))
     });
   }
 };
@@ -87,6 +101,8 @@ Hooks.once("init", () => {
   F.register({ config: true });
   S.register();
   registerWindowPlacement(ID);
+  // The shared "Module data" folder (our drafts journal) stays out of the Journal sidebar unless a module's switch shows it.
+  hideDataFolder(ID, { shown: () => S.get("showModuleData") === true });
   const mod = game.modules.get(ID); if (mod) mod.api = API;
   SetWin.registerMenu();
   if (F.on("talents")) {
@@ -103,6 +119,8 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   if (F.on("talents")) { Path.registerHandlers(); Path.start(); }
+  // The drafts journal is filed into "Module data" once per load, by the GM client that does automatic work.
+  if (F.on("editor")) leader.settled().then(() => { if (leader.isLeader()) Drafts.file(); }).catch(e => warn("drafts: file", e));
   if (F.on("toolkitPage")) SheetPage.ready();
   isReady = true;
   // Optional: show up in the Wanderer's Satchel hub when it is installed.

@@ -1,21 +1,24 @@
 /**
- * The GM's "Build a talent effect" window (feature "builder"; ApplicationV2, core's RememberedWindow key "builder"), opened from our
- * Settings window and `api.builder.open()`. Until the tree editor exists (slice 5), this is where a GM puts a built spec into a node's
- * rank slot: it reads the published trees, shows the template form and its preview (builder-view-model.mjs), and on Save writes the
- * tree back into its JournalEntry's `flags.wanderers-path.tree` in the tree compendium (the GM's own edit of their content, not an
- * automatic write: no leader needed). Granted copies follow on the next reconcile (Refresh granted items). The spell picker (Grant a
- * spell) takes a dropped Item or a pasted UUID and checks it against the compendium's index (or the world's items), never fromUuid.
- * Untested in Node.
+ * The GM's "Build a talent effect" window (feature "builder"; ApplicationV2, core's RememberedWindow key "builder"). Since 0.6.0 it
+ * is opened by the tree editor's **Build…** button on one rank slot of the tree being edited (`openBuilder(target)`): it shows the
+ * template form and its preview (builder-view-model.mjs) and, on **Use for this rank**, hands the changed tree back to the editor
+ * (`target.onSave(tree)`), which keeps it in the working copy (undo, Save draft, Publish). The builder writes nothing itself: tree
+ * writes live only in editor.mjs. The spell picker (Grant a spell) takes a dropped Item or a pasted UUID and checks it against the
+ * compendium's index (or the world's items), never fromUuid. Untested in Node.
  */
 import { RememberedWindow } from "../vendor/wanderers-core/foundry/index.mjs";
 import { UI_CLASSES } from "../vendor/wanderers-core/index.mjs";
-import { ID, TITLE, TREE_FLAG } from "./const.mjs";
+import { ID, TITLE } from "./const.mjs";
 import { log, warn } from "./core.mjs";
-import { normalizeTree } from "./tree-model.mjs";
 import { withBuiltSlot } from "./builder-model.mjs";
 import { buildState, builderHTML, readForm, stateSpec, parseItemUuid, spellInfo } from "./builder-view-model.mjs";
-import { loadTrees, pack, invalidate } from "./trees.mjs";
 import { builtOk } from "./path.mjs";
+
+/**
+ * What the builder edits: one rank slot of the editor's working copy. `tree()` returns the current working copy (null when the
+ * editor moved to another tree); `onSave(tree)` takes the changed tree and returns whether it was applied.
+ * @typedef {{ tree: () => import("./tree-model.mjs").Tree | null, node: string, slot: number, onSave: (tree: Record<string, any>) => boolean }} BuildTarget
+ */
 
 const { ApplicationV2 } = foundry.applications.api;
 /** Placement key (never rename). */
@@ -35,15 +38,20 @@ export class BuilderWindow extends RememberedWindow(ApplicationV2, { moduleId: I
   /** @type {import("./builder-view-model.mjs").BuildState | null} */ state = null;
   busy = false;
   /** @type {import("./builder-view-model.mjs").SpellInfo | null} the last spell lookup */ spell = null;
+  /** @type {BuildTarget | null} */ target = null;
+
+  /** The tree being edited, as a one-item list (or none when the editor moved on). */
+  #trees() { const t = this.target?.tree(); return t ? [t] : []; }
 
   async _renderHTML() {
     const div = document.createElement("div"); div.className = "wp-scroll";
     if (!game.user?.isGM) { div.textContent = "GM only."; return div; }
-    const trees = await loadTrees();
-    this.state = buildState({ ...(this.state ?? {}), ...this.raw }, trees);
+    const trees = this.#trees();
+    if (!this.target || !trees.length) { div.innerHTML = `<p class="wc-hint">Open the tree editor and click Build… on a talent's rank slot.</p>`; return div; }
+    this.state = buildState({ ...(this.state ?? {}), ...this.raw, tree: trees[0].id, node: this.target.node, slot: this.target.slot }, trees);
     const uuid = this.state.template === "spell" ? String(this.state.params.spell ?? "") : "";
     if (uuid && this.spell?.uuid !== uuid) this.spell = await lookupSpell(uuid);
-    div.innerHTML = builderHTML(this.state, trees, { supported: builtOk(), packLocked: !!pack()?.locked, spell: uuid ? this.spell : null });
+    div.innerHTML = builderHTML(this.state, trees, { supported: builtOk(), fixed: true, spell: uuid ? this.spell : null });
     return div;
   }
 
@@ -77,27 +85,22 @@ export class BuilderWindow extends RememberedWindow(ApplicationV2, { moduleId: I
 
   static async #onSave() {
     const self = /** @type {BuilderWindow} */ (/** @type {unknown} */ (this));
-    if (!game.user?.isGM || self.busy || !self.state) return;
+    if (!game.user?.isGM || self.busy || !self.state || !self.target) return;
+    const trees = self.#trees();
+    if (!trees.length) return ui.notifications.warn(`${TITLE}: the tree editor shows another tree now.`);
     self.raw = { ...self.#values(), prevTemplate: self.state.template };
-    const s = buildState({ ...self.state, ...self.raw }, await loadTrees());
+    const s = buildState({ ...self.state, ...self.raw, tree: trees[0].id, node: self.target.node, slot: self.target.slot }, trees);
     if (s.template === "spell") { const sp = await lookupSpell(String(s.params.spell ?? "")); if (!sp.ok) return ui.notifications.warn(`${TITLE}: ${sp.error}`); }
-    const p = pack();
-    if (!p) return ui.notifications.warn(`${TITLE}: no tree compendium is chosen.`);
-    if (p.locked) return ui.notifications.warn(`${TITLE}: the tree compendium is locked.`);
     self.busy = true;
     try {
-      const index = await p.getIndex({ fields: [`flags.${ID}.${TREE_FLAG}`] });
-      const entry = [...index].find(e => normalizeTree(e?.flags?.[ID]?.[TREE_FLAG]).id === s.tree);
-      if (!entry) return ui.notifications.warn(`${TITLE}: that tree isn't in the compendium any more.`);
-      const doc = await p.getDocument(entry._id);
-      const r = withBuiltSlot(doc?.getFlag(ID, TREE_FLAG), s.node, s.slot, stateSpec(s), s.mode);
+      const r = withBuiltSlot(trees[0], s.node, s.slot, stateSpec(s), s.mode);
       if (!r.ok) return ui.notifications.warn(`${TITLE}: ${r.error}`);
-      // The whole tree flag is written back (Foundry merges objects; the nodes array is replaced as a whole).
-      await doc.update({ [`flags.${ID}.${TREE_FLAG}`]: r.tree });
-      invalidate();
-      log(`builder: ${s.tree}.${s.node} slot ${s.slot} = ${s.template}`);
-      ui.notifications.info(`${TITLE}: saved. Characters who learned it get it on the next change, or now with Refresh granted items.`);
-    } finally { self.busy = false; self.render(); }
+      if (!self.target.onSave(r.tree)) return;
+      log(`builder: ${s.tree}.${s.node} slot ${s.slot} = ${s.template} (in the editor's working copy)`);
+      ui.notifications.info(`${TITLE}: built into the talent. Save the draft and publish it in the tree editor.`);
+      self.busy = false;
+      await self.close();
+    } finally { self.busy = false; if (self.rendered) self.render(); }
   }
 }
 
@@ -117,10 +120,13 @@ async function lookupSpell(uuid) {
   } catch (e) { warn("spell lookup", e); return spellInfo(uuid, null); }
 }
 
-/** Opens the builder (GM). */
-export function openBuilder() {
+/** Opens the builder on one rank slot of the tree editor's working copy (GM; the editor calls this). @param {BuildTarget} target */
+export function openBuilder(target) {
   if (!game.user?.isGM) { ui.notifications.warn(`${TITLE}: GM only.`); return null; }
   app ??= new BuilderWindow();
+  const same = app.target && app.target.node === target.node && app.target.slot === target.slot && app.target.tree()?.id === target.tree()?.id;
+  app.target = target;
+  if (!same) { app.state = null; app.raw = {}; app.spell = null; }
   app.render({ force: true });
   return app;
 }

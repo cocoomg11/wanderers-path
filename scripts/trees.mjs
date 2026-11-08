@@ -73,6 +73,22 @@ export async function loadTreesChecked() {
   return { trees, ok: readOk };
 }
 
+/**
+ * Whether a granted document exists, without loading it: a world document or a compendium index entry. Unknown (undefined) when
+ * a compendium's index isn't loaded, so nothing is reported wrongly. Used by the health check and the editor's Publish.
+ * @param {string} uuid @returns {boolean | undefined}
+ */
+export function uuidExists(uuid) {
+  try {
+    if (fromUuidSync(uuid, { strict: false })) return true;
+    const p = uuid.split(".");
+    if (p[0] !== "Compendium") return false;
+    const pk = game.packs?.get(`${p[1]}.${p[2]}`);
+    if (!pk) return false;
+    return pk.index?.size ? false : undefined;
+  } catch { return undefined; }
+}
+
 /** Hooks that invalidate the cache (init, feature on). Each bails out unless the change is in our pack. */
 export function registerHooks() {
   const ours = (/** @type {any} */ doc) => !!doc?.pack && doc.pack === packId();

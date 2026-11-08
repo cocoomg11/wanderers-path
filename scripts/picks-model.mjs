@@ -160,6 +160,12 @@ export function treesFor({ trees, picks, classes = [], subclasses = [], level, r
     const manual = picks.trees.add.includes(tree.id);
     if (!auto && !manual) continue;
     const unlockLevel = tree.unlockLevel ?? rules.unlockLevel;
+    // A tree the GM turned off (0.6.0) is offered to no one; a character who has ranks in it keeps them (and their grants), locked.
+    if (tree.enabled === false) {
+      if (!Object.values(picks.ranks[tree.id] ?? {}).some(r => r > 0)) continue;
+      out.push({ tree, unlocked: false, unlockLevel, manual: manual && !auto, reason: "The GM has turned this tree off." });
+      continue;
+    }
     const unlocked = level >= unlockLevel;
     out.push({ tree, unlocked, unlockLevel, manual: manual && !auto, reason: unlocked ? "" : `Talents open at level ${unlockLevel}.` });
   }

@@ -12,5 +12,7 @@ export const HOOKS = { ready: `${ID}.ready`, learned: `${ID}.learned`, respec: `
 export const PICKS_FLAG = "picks";
 /** Where a published tree is stored on its JournalEntry: `flags.wanderers-path.tree`. */
 export const TREE_FLAG = "tree";
+/** Marks the readable page the tree editor writes into a tree's JournalEntry: `flags.wanderers-path.page` on the page (0.6.0). */
+export const PAGE_FLAG = "page";
 /** Wanderer's Toolkit (recommends only): its sheet takes our Talents page. */
 export const TOOLKIT_ID = "wayfarers-toolkit";

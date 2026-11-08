@@ -1,6 +1,7 @@
 /**
  * The GM's Settings window (ApplicationV2, core's RememberedWindow key "settings"): the rules (settings rows on the "rules" tab), the
- * tree compendium pick (world Journal Entry compendiums), the health check and Remove data. Also the Configure Settings menu entry
+ * tree compendium pick (world Journal Entry compendiums), the tree editor's button (0.6.0), the health check and Remove data (with
+ * this browser's "Show the Module data folder" switch). Also the Configure Settings menu entry
  * and the Satchel's Settings button. Untested in Node: needs a live client.
  */
 import { RememberedWindow } from "../vendor/wanderers-core/foundry/index.mjs";
@@ -9,7 +10,7 @@ import { ID, TITLE } from "./const.mjs";
 import { F, S } from "./core.mjs";
 import * as Health from "./health.mjs";
 import * as Cleanup from "./cleanup.mjs";
-import { openBuilder } from "./builder.mjs";
+import { openEditor } from "./editor.mjs";
 import { reportHTML, fixAt, fixNotice } from "./settings-model.mjs";
 
 const { ApplicationV2, DialogV2 } = foundry.applications.api;
@@ -25,7 +26,7 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     classes: ["wp-window", "wp-settings-window", ...UI_CLASSES],
     window: { title: `${TITLE} · Settings`, icon: "fa-solid fa-route", resizable: true },
     position: { width: 560, height: 640 },
-    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove, fix: SettingsWindow.#onFix, builder: () => { openBuilder(); } }
+    actions: { save: SettingsWindow.#onSave, health: SettingsWindow.#onHealth, remove: SettingsWindow.#onRemove, fix: SettingsWindow.#onFix, editor: () => { openEditor(); } }
   };
   /** @type {any[] | null} */ report = null;
   /** The key ("s:l") of the fix that is running, or null. @type {string | null} */ busy = null;
@@ -49,12 +50,13 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     const rows = Cleanup.dryRunRows();
     div.innerHTML = `<section class="wc-panel"><div class="wc-panel-head"><h3>Rules</h3></div><div class="wc-panel-body">${basic.length ? basic.map(row).join("") : `<p class="wc-hint">Talents are turned off (Features).</p>`}
         <div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="save"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save</button></div></div></section>
-      ${F.on("builder") ? `<section class="wc-panel"><div class="wc-panel-head"><h3>Feature builder</h3></div><div class="wc-panel-body"><p class="wc-hint">Give a published talent a built effect: AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points or critical range, scaling with its rank.</p>
-        <div class="wc-row"><button type="button" class="wc-btn" data-action="builder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Build a talent effect</button></div></div></section>` : ""}
+      ${F.on("editor") ? `<section class="wc-panel"><div class="wc-panel-head"><h3>Tree editor</h3></div><div class="wc-panel-body"><p class="wc-hint">Make and change talent trees: drop items and effects onto a grid, link requirements, ${F.on("builder") ? "build effects from templates (AC, speed, senses, roll bonuses, uses per rest, granted spells, …), " : ""}save drafts and publish them for players.</p>
+        <div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="editor"><i class="fa-solid fa-sitemap" aria-hidden="true"></i> Open the tree editor</button></div></div></section>` : ""}
       <section class="wc-panel"><div class="wc-panel-head"><h3>Health check</h3></div><div class="wc-panel-body">${this.fixed ? `<ul class="wc-lines">${statusLine(this.fixed.level, this.fixed.text)}</ul>` : ""}${reportHTML(this.report, { busy: this.busy })}
         <div class="wc-row"><button type="button" class="wc-btn" data-action="health"><i class="fa-solid fa-stethoscope" aria-hidden="true"></i> ${this.report ? "Run again" : "Run check"}</button></div></div></section>
       <section class="wc-panel"><div class="wc-panel-head"><h3>Remove Wanderer's Path data</h3></div><div class="wc-panel-body">
         ${rows.map(r => `<label class="wp-check"><input type="checkbox" name="rm-${esc(r.key)}"${r.ticked && r.count ? " checked" : ""}${Cleanup.REMOVABLE.includes(r.key) && r.count ? "" : " disabled"}> ${esc(r.text)}</label>`).join("")}
+        <label class="wp-check"><input type="checkbox" data-change="moduleData"${S.get("showModuleData") === true ? " checked" : ""}> Show the Module data folder in the Journal sidebar (this browser; it holds the drafts journal)</label>
         <label class="wp-field"><span>Type ${CONFIRM_WORD} to confirm</span><input type="text" name="confirm" autocomplete="off"></label>
         <div class="wc-row"><button type="button" class="wc-btn wc-btn-danger" data-action="remove"><i class="fa-solid fa-trash" aria-hidden="true"></i> Remove</button></div></div></section>`;
     return div;
@@ -75,6 +77,16 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     }
     ui.notifications.info(`${TITLE}: settings saved.`);
     self.render();
+  }
+
+  /** @param {any} context @param {any} options */
+  async _onFirstRender(context, options) {
+    await super._onFirstRender(context, options);
+    // This browser's "Show the Module data folder" switch (core's hideDataFolder reads it).
+    this.element.addEventListener("change", (/** @type {Event} */ ev) => {
+      const el = /** @type {HTMLInputElement} */ (ev.target);
+      if (el?.dataset?.change === "moduleData") S.set("showModuleData", !!el.checked);
+    });
   }
 
   static async #onHealth() {
@@ -126,5 +138,5 @@ export function registerMenu() {
   class Opener extends ApplicationV2 {
     async render() { openSettings(); return this; }
   }
-  game.settings.registerMenu(ID, "settings", { name: TITLE, label: "Open settings", hint: "Tree compendium, points, respec, health check and Remove data.", icon: "fa-solid fa-route", type: Opener, restricted: true });
+  game.settings.registerMenu(ID, "settings", { name: TITLE, label: "Open settings", hint: "Tree compendium, points, respec, the tree editor, health check and Remove data.", icon: "fa-solid fa-route", type: Opener, restricted: true });
 }

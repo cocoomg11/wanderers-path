@@ -8,11 +8,14 @@ import * as Cleanup from "../scripts/cleanup.mjs";
 const src = (/** @type {string} */ p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const scripts = readdirSync(new URL("../scripts/", import.meta.url)).filter(f => f.endsWith(".mjs"));
 
-test("features, settings and hooks (0.3.0)", () => {
-  assert.deepEqual(F.FEATURES.map(f => f.id), ["talents", "sheetButton", "keybindings", "moduleHooks", "toolkitPage", "builder"]);
+test("features, settings and hooks (0.6.0)", () => {
+  assert.deepEqual(F.FEATURES.map(f => f.id), ["talents", "sheetButton", "keybindings", "moduleHooks", "toolkitPage", "builder", "editor"]);
+  assert.equal(F.FEATURES.find(f => f.id === "editor")?.default, true);
   for (const f of F.FEATURES.slice(1)) assert.deepEqual(f.needs, ["talents"]);
   const keys = S.ROWS.map(r => r.key);
-  for (const k of ["treePack", "enabledForAll", "unlockLevel", "pointsFromLevel", "pointsPerLevel", "playerRespec", "debugLog"]) assert.ok(keys.includes(k), k);
+  for (const k of ["treePack", "enabledForAll", "unlockLevel", "pointsFromLevel", "pointsPerLevel", "playerRespec", "debugLog", "showModuleData"]) assert.ok(keys.includes(k), k);
+  const smd = S.ROWS.find(r => r.key === "showModuleData");
+  assert.equal(smd?.hidden, true); assert.equal(smd?.client, true); assert.equal(smd?.default, false);
   const d = Object.fromEntries(S.ROWS.map(r => [r.key, r.default]));
   assert.deepEqual([d.treePack, d.enabledForAll, d.unlockLevel, d.pointsFromLevel, d.pointsPerLevel, d.playerRespec], ["", true, 1, 2, 1, false]);
   assert.deepEqual(HOOKS, { ready: `${ID}.ready`, learned: `${ID}.learned`, respec: `${ID}.respec` });
@@ -43,7 +46,7 @@ test("every window carries core's UI_CLASSES and wp-window; no literal revision"
 test("css: every rule scoped to our windows or our tooltip, no backdrop blur", () => {
   const css = src("styles/wanderers-path.css").replace(/\/\*[\s\S]*?\*\//g, "").replace(/@media[^{]*\{([\s\S]*?\})\s*\}/g, "$1");
   for (const rule of css.split("}").map(r => r.split("{")[0].trim()).filter(Boolean)) {
-    for (const sel of rule.split(",")) assert.match(sel.trim(), /^(\.wp-window|\.wp-path-window|\.wp-builder-window|\.wp-page|#tooltip\.wp-tip|\.locked-tooltip\.wp-tip)\b/, sel);
+    for (const sel of rule.split(",")) assert.match(sel.trim(), /^(\.wp-window|\.wp-path-window|\.wp-builder-window|\.wp-editor-window|\.wp-page|#tooltip\.wp-tip|\.locked-tooltip\.wp-tip)\b/, sel);
   }
   assert.match(css, /backdrop-filter: none/);
   // The sheet page sits in the toolkit's dark sheet in both themes: no theme selectors there.
@@ -59,9 +62,11 @@ test("public repo: no publisher or campaign words; no talent content", () => {
   assert.ok(!("packs" in JSON.parse(src("module.json"))));
 });
 
-test("cleanup: picks, granted documents and settings removable, tree compendium only listed", () => {
-  assert.deepEqual(Cleanup.CATEGORIES.map(c => c[0]), ["picks", "granted", "settings", "trees"]);
-  assert.deepEqual([...Cleanup.REMOVABLE], ["picks", "granted", "settings"]);
+test("cleanup: picks, granted documents, drafts and settings removable, tree compendium only listed", () => {
+  assert.deepEqual(Cleanup.CATEGORIES.map(c => c[0]), ["picks", "granted", "drafts", "settings", "trees"]);
+  assert.deepEqual([...Cleanup.REMOVABLE], ["picks", "granted", "drafts", "settings"]);
+  assert.equal(Cleanup.CATEGORIES.find(c => c[0] === "drafts")?.[2], false, "drafts unticked by default");
+  assert.match(src("scripts/cleanup.mjs"), /if \(keys\.includes\("drafts"\)\) done\.drafts = await Drafts\.remove\(\);/);
   assert.match(src("scripts/cleanup.mjs"), /never deleted/);
   assert.match(src("scripts/cleanup.mjs"), /if \(keys\.includes\("granted"\)\) done\.granted = await removeGranted\(\);[\s\S]*?keys\.includes\("picks"\)/, "granted documents go before the picks");
 });
@@ -71,7 +76,9 @@ test("grant engine: leader-only writes, sources loaded in bulk, reconcile after 
   assert.match(g, /export async function applyPlan[\s\S]*?if \(!leader\.isLeader\(\)\) throw/);
   assert.doesNotMatch(g, /\bfromUuid\(/, "no async fromUuid per node");
   assert.match(g, /getDocuments\(\{ _id__in:/);
-  for (const f of scripts.filter(f => !["grants.mjs", "cleanup.mjs"].includes(f))) assert.doesNotMatch(src(`scripts/${f}`), /(create|update|delete)EmbeddedDocuments/, f);
+  for (const f of scripts.filter(f => !["grants.mjs", "cleanup.mjs", "editor.mjs"].includes(f))) assert.doesNotMatch(src(`scripts/${f}`), /(create|update|delete)EmbeddedDocuments/, f);
+  // The editor adds only the readable page to a tree's own Journal Entry.
+  for (const m of src("scripts/editor.mjs").matchAll(/(create|update|delete)EmbeddedDocuments\("([A-Za-z]+)"/g)) assert.equal(m[2], "JournalEntryPage");
   const p = src("scripts/path.mjs");
   assert.equal((p.match(/await writePicks\(/g) ?? []).length, (p.match(/await writePicks\([^)]*\);\s*await syncGrants\(/g) ?? []).length, "every picks write is followed by a reconcile");
   assert.match(p, /leader\.handle\("pathLearn", one\(onLearn\)\)/, "requests run one at a time per character");
@@ -82,13 +89,19 @@ test("leader writes only: picks are written in one place, after the leader check
   const p = src("scripts/path.mjs");
   assert.equal((p.match(/actor\.update\(/g) ?? []).length, 1);
   assert.match(p, /async function writePicks[\s\S]*?if \(!leader\.isLeader\(\)\) throw/);
-  for (const f of scripts.filter(f => f !== "path.mjs" && f !== "builder.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /\.update\(\{|setFlag\(/, f);
-  // The builder window is the GM editing their own tree: one write, of the tree flag on the tree's JournalEntry, GM only.
+  for (const f of scripts.filter(f => f !== "path.mjs" && f !== "editor.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /\.update\(\{|setFlag\(/, f);
+  // 0.6.0: trees are written only by the tree editor (the GM editing their own content): the tree flag (with the name) on the tree's
+  // JournalEntry and its readable page, inside Publish; the builder hands its result back to the editor and writes nothing.
+  const e = src("scripts/editor.mjs");
+  assert.equal((e.match(/\.update\(\{/g) ?? []).length, 2);
+  assert.match(e, /await entry\.update\(\{ name: tree\.name, \[`flags\.\$\{ID\}\.\$\{TREE_FLAG\}`\]: tree \}\)/);
+  assert.match(e, /if \(old\) await old\.update\(\{ "text\.content": html \}\)/);
+  assert.match(e, /static async #onPublish\(\) \{[\s\S]*?if \(!self\.work \|\| self\.busy \|\| !game\.user\?\.isGM\) return;[\s\S]*?const plan = E\.publishPlan[\s\S]*?if \(!plan\.ok\)/);
+  assert.doesNotMatch(e, /setFlag\(|PICKS_FLAG\]:|actor\.update/);
+  for (const f of scripts.filter(f => f !== "editor.mjs")) assert.doesNotMatch(src(`scripts/${f}`), /TREE_FLAG\}`\]:|\[TREE_FLAG\]:/, `${f} writes no tree flag`);
   const b = src("scripts/builder.mjs");
-  assert.equal((b.match(/\.update\(\{/g) ?? []).length, 1);
-  assert.match(b, /await doc\.update\(\{ \[`flags\.\$\{ID\}\.\$\{TREE_FLAG\}`\]: r\.tree \}\)/);
-  assert.match(b, /static async #onSave\(\) \{[\s\S]*?if \(!game\.user\?\.isGM/);
-  assert.doesNotMatch(b, /setFlag\(|PICKS_FLAG|EmbeddedDocuments/);
+  assert.doesNotMatch(b, /\.update\(|setFlag\(|PICKS_FLAG|EmbeddedDocuments|TREE_FLAG/);
+  assert.match(b, /static async #onSave\(\) \{[\s\S]*?if \(!game\.user\?\.isGM[\s\S]*?self\.target\.onSave\(r\.tree\)/);
   assert.match(p, /if \(!user\.isGM && !st\.rules\.playerRespec\)/, "players refund only with player respec on");
   assert.match(p, /testUserPermission\(user, "OWNER"\)/);
   assert.match(p, /if \(!F\.on\("moduleHooks"\)\) return;/);

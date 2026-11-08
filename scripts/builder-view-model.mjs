@@ -72,21 +72,25 @@ export const stateSpec = s => normalizeSpec({ template: s.template, params: s.pa
 /**
  * The window's HTML. `data-action` on our own window's buttons (save); fields carry `name`.
  * `spell` is the spell picker's lookup of the "spell" parameter (Grant a spell); without it the spell counts as unchecked.
- * @param {BuildState} s @param {Tree[]} trees @param {{ supported: boolean, packLocked?: boolean, spell?: SpellInfo | null }} o
+ * `fixed` (0.6.0, the tree editor's Build…): the tree, talent and rank slot are given, so they are shown, not chosen, and Save hands
+ * the result back to the editor.
+ * @param {BuildState} s @param {Tree[]} trees @param {{ supported: boolean, packLocked?: boolean, fixed?: boolean, spell?: SpellInfo | null }} o
  */
 export function builderHTML(s, trees, o) {
-  if (!trees.length) return `<div class="wp-build"><p class="wc-hint">No trees are published yet. Choose the tree compendium in the settings and publish a tree first.</p></div>`;
+  if (!trees.length) return `<div class="wp-build"><p class="wc-hint">${o.fixed ? "Open the tree editor and click Build… on a talent's rank slot." : "No trees are published yet. Choose the tree compendium in the settings and publish a tree first."}</p></div>`;
   const tree = /** @type {Tree} */ (trees.find(t => t.id === s.tree));
   const node = tree.nodes.find(n => n.id === s.node);
   const sel = (/** @type {string} */ name, /** @type {[string, string][]} */ opts, /** @type {string} */ cur, /** @type {string} */ label) =>
     `<label class="wp-field"><span>${esc(label)}</span><select name="${esc(name)}">${opts.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
-  const rows = [sel("tree", trees.map(t => [t.id, t.name]), s.tree, "Tree")];
+  const rows = o.fixed ? [] : [sel("tree", trees.map(t => [t.id, t.name]), s.tree, "Tree")];
   if (!node) rows.push(`<p class="wc-hint">This tree has no talents yet.</p>`);
   else {
-    rows.push(sel("node", tree.nodes.map(n => [n.id, `${n.name}${n.maxRanks > 1 ? ` (${n.maxRanks} ranks)` : ""}`]), s.node, "Talent"));
     const replace = node.grant.perRank === "replace";
     const maxSlot = replace ? Math.min(node.maxRanks, node.grant.ranks.length + 1) : 1;
-    if (replace) rows.push(sel("slot", Array.from({ length: maxSlot }, (_, i) => [String(i + 1), `Rank ${i + 1}${i < node.grant.ranks.length ? " (replaces what is there)" : " (new)"}`]), String(s.slot), "Rank slot"));
+    if (o.fixed) rows.push(`<h3 class="wp-build-for">${esc(tree.name)} › ${esc(node.name)}${replace ? ` · rank ${s.slot}` : node.maxRanks > 1 ? ` · all ${node.maxRanks} ranks` : ""}</h3>${node.grant.ranks[s.slot - 1] ? `<p class="wc-hint">This replaces what the slot holds now.</p>` : ""}`);
+    else rows.push(sel("node", tree.nodes.map(n => [n.id, `${n.name}${n.maxRanks > 1 ? ` (${n.maxRanks} ranks)` : ""}`]), s.node, "Talent"));
+    if (o.fixed) { /* the slot is given */ }
+    else if (replace) rows.push(sel("slot", Array.from({ length: maxSlot }, (_, i) => [String(i + 1), `Rank ${i + 1}${i < node.grant.ranks.length ? " (replaces what is there)" : " (new)"}`]), String(s.slot), "Rank slot"));
     else if (node.grant.ranks[0]) rows.push(`<p class="wc-hint">This replaces what the talent grants now (one grant that scales with its rank).</p>`);
     const t = /** @type {import("./builder-model.mjs").Template} */ (templateOf(s.template));
     rows.push(sel("template", TEMPLATES.map(x => [x.id, `${x.label}${x.itemOnly ? " (feature item)" : ""}`]), s.template, "What it does"));
@@ -117,7 +121,7 @@ export function builderHTML(s, trees, o) {
     rows.push(`<section class="wp-box wp-preview"><h3>Preview</h3><p class="${issues.length ? "wp-warn" : ""}">${esc(previewLine(spec, replace ? 1 : node.maxRanks))}</p></section>`);
     if (!o.supported) rows.push(`<p class="wp-warn">Built talents need Foundry 14 and dnd5e 6; in this world they are saved but grant nothing.</p>`);
     if (o.packLocked) rows.push(`<p class="wp-warn">The tree compendium is locked: unlock it to save.</p>`);
-    rows.push(`<div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="save"${issues.length || o.packLocked ? " disabled" : ""}><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save to the talent</button></div>`);
+    rows.push(`<div class="wc-row"><button type="button" class="wc-btn wc-btn-primary" data-action="save"${issues.length || o.packLocked ? " disabled" : ""}><i class="fa-solid fa-${o.fixed ? "check" : "floppy-disk"}" aria-hidden="true"></i> ${o.fixed ? "Use for this rank" : "Save to the talent"}</button></div>`);
   }
   return `<div class="wp-build">${rows.join("")}</div>`;
 }

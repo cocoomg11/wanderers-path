@@ -19,7 +19,8 @@ export const F = createFeatures(ID, [
   { id: "keybindings", label: "Key binding", hint: "An Open talents action in Configure Controls (no key assigned by default).", needs: ["talents"] },
   { id: "moduleHooks", label: "Hooks for other modules", hint: "Fires wanderers-path.learned and wanderers-path.respec after talents change (ids only).", needs: ["talents"] },
   { id: "toolkitPage", label: "Toolkit sheet page", hint: "A Talents page (bookmark) on Wanderer's Toolkit's character sheet, when the toolkit (2.3.0 or later) is active with its sheet on. The talent window stays.", needs: ["talents"] },
-  { id: "builder", label: "Feature builder", hint: "Build a talent's effect from plain-language templates (AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points, critical range). Needs Foundry 14 and dnd5e 6.", needs: ["talents"] }
+  { id: "builder", label: "Feature builder", hint: "Build a talent's effect from plain-language templates (AC, speed, senses, roll bonuses, advantage, proficiencies, resistances, ability scores, hit points, critical range). Needs Foundry 14 and dnd5e 6. Used from the tree editor.", needs: ["talents"] },
+  { id: "editor", label: "Tree editor", hint: "The GM's tree editor: make trees, drop items and effects onto a grid, link requirements, save drafts and publish them to the tree compendium.", needs: ["talents"] }
 ], { title: TITLE });
 
 /** Points one setting change re-reads: open windows and the tree cache listen through this. */
@@ -36,10 +37,12 @@ export const S = createSettings(ID, [
   { key: "pointsFromLevel", type: "number", default: 2, min: 1, max: 30, step: 1, label: "First point at level", hint: "Characters get points from this level on.", tab: "rules", feature: "talents", onChange: fire },
   { key: "pointsPerLevel", type: "number", default: 1, min: 0, max: 10, step: 1, label: "Points per level", hint: "With the defaults: 19 points at level 20, plus GM awards.", tab: "rules", feature: "talents", onChange: fire },
   { key: "playerRespec", type: "bool", default: false, label: "Players may refund", hint: "On: players refund and reset their own talents for free (honour system). A GM can always respec for free.", tab: "rules", feature: "talents", onChange: fire },
-  { key: "debugLog", type: "bool", default: false, label: "Debug logging", hint: "Write the module's automatic decisions to the browser console.", tab: "data", advanced: true }
+  { key: "debugLog", type: "bool", default: false, label: "Debug logging", hint: "Write the module's automatic decisions to the browser console.", tab: "data", advanced: true },
+  // 0.6.0: this browser shows the shared "Module data" folder (core's hideDataFolder hides it otherwise). A hidden client record.
+  { key: "showModuleData", type: "bool", default: false, hidden: true, client: true, onChange: () => { try { /** @type {any} */ (globalThis).ui?.journal?.render?.(); } catch { /* not ready */ } } }
 ], { reserved: F.FEATURES.map(f => f.key) });
 
-/** Hidden record settings (never exported or imported by the Satchel). None yet. */
+/** Hidden record settings (never exported or imported by the Satchel): showModuleData (client, 0.6.0). */
 export const RECORDS = records(S.ROWS);
 
 export const { log, warn } = createLogger(ID);

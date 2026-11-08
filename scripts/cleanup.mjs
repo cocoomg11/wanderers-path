@@ -1,7 +1,7 @@
 /**
  * Remove Wanderer's Path data (GM): characters' picks (`flags.wanderers-path` on actors, world actors and unlinked tokens' own
  * actors), the items and effects talents granted (tagged `flags.wanderers-path.granted`; deleted, untagged documents never) and the
- * module's settings. The tree compendium is the GM's own content: it is listed in the dry run, never deleted.
+ * module's settings, and (0.6.0) the tree editor's drafts journal (core's GM-only store; unticked by default). The tree compendium is the GM's own content: it is listed in the dry run, never deleted.
  * Nothing changes until the GM ticks categories and types REMOVE (core's cleanup model). The plan is read with `plan()`; Foundry is
  * only touched when `plan()` / `remove()` run.
  */
@@ -9,6 +9,7 @@ import { CONFIRM_WORD, confirmed, hasFlags, dryRun, picked, changedSettings, sum
 import { unsetFlags, resetSettings, settingValues } from "../vendor/wanderers-core/foundry/index.mjs";
 import { ID } from "./const.mjs";
 import { existingOf } from "./grants.mjs";
+import * as Drafts from "./drafts.mjs";
 
 /** Deletes every tagged item and effect (one call per actor and type). Returns how many were deleted. */
 async function removeGranted() {
@@ -28,11 +29,12 @@ async function removeGranted() {
 export const CATEGORIES = [
   ["picks", "Talent picks, awards and logs on characters (flags only; the characters stay)", true],
   ["granted", "Items and effects talents granted to characters (deleted; items you added by hand are never touched)", true],
-  ["settings", "Reset Wanderer's Path's settings to their defaults (the tree compendium choice and the window placements too; reloads)", false],
+  ["drafts", "Tree drafts: the GM-only journal of unpublished trees in the Module data folder (unpublished edits are lost; published trees stay)", false],
+  ["settings", "Reset Wanderer's Path's settings to their defaults (the tree compendium choice and the window placements, including the tree editor's, and the Module data folder switch too; reloads)", false],
   ["trees", "The tree compendium (listed only: your trees are your own content and are never deleted here)", false]
 ];
 /** Categories remove() acts on (the tree compendium is never one). */
-export const REMOVABLE = Object.freeze(["picks", "granted", "settings"]);
+export const REMOVABLE = Object.freeze(["picks", "granted", "drafts", "settings"]);
 
 /** Every actor that can hold picks: world actors and unlinked tokens' own actors. */
 function* holders() {
@@ -49,9 +51,10 @@ function* grantHolders() {
 /** Counts what each category would remove. Nothing is changed. @returns {import("../vendor/wanderers-core/cleanup-model.mjs").Plan} */
 export function plan() {
   /** @type {import("../vendor/wanderers-core/cleanup-model.mjs").Plan} */
-  const p = { picks: [], granted: [], settings: [], trees: [] };
+  const p = { picks: [], granted: [], drafts: [], settings: [], trees: [] };
   for (const a of holders()) if (hasFlags(a, ID)) p.picks.push({ uuid: a.uuid, name: String(a.name ?? a.id) });
   for (const a of grantHolders()) for (const d of existingOf(a)) p.granted.push({ uuid: `${a.uuid}.${d.type}.${d.id}`, name: `${d.name} (${a.name})` });
+  try { const st = Drafts.status(); if (st.exists) p.drafts.push({ id: st.id, name: `${st.name}${st.count > 1 ? ` (${st.count} entries)` : ""}` }); } catch { p.drafts = []; }
   // World and client settings that differ from their defaults (client ones are this browser's: window placements).
   try { p.settings = changedSettings(settingValues(ID), { scopes: ["world", "client"] }); } catch { p.settings = []; }
   let packKey = ""; try { packKey = String(game.settings.get(ID, "treePack") ?? ""); } catch { packKey = ""; }
@@ -75,6 +78,7 @@ export async function remove(pick, word) {
   /** @type {Record<string, number>} */ const done = {};
   // Granted documents first: their tag is what finds them.
   if (keys.includes("granted")) done.granted = await removeGranted();
+  if (keys.includes("drafts")) done.drafts = await Drafts.remove();
   if (keys.includes("picks")) done.picks = await unsetFlags(ID, p.picks.map(x => /** @type {string} */ (x.uuid)));
   if (keys.includes("settings")) done.settings = await resetSettings(ID, p.settings.map(x => /** @type {string} */ (x.key)));
   const text = summary(done, CATEGORIES);

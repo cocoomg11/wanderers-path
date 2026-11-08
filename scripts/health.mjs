@@ -1,7 +1,7 @@
 /**
  * The read-only health check (core's healthCollector): never throws, never writes. GM only (players get []): it names trees and
  * characters. Sections: Trees (compendium chosen, found, readable by players, published count, issues, granted items with
- * advancement), Characters (orphan picks, overspent, granted documents out of step), Learning (a GM is needed to learn). Lines that
+ * advancement), Drafts (0.6.0: unpublished drafts, the GM-only drafts journal), Characters (orphan picks, overspent, granted documents out of step), Learning (a GM is needed to learn). Lines that
  * have a safe fix carry it (core's `fix`): Refresh granted items, Refund orphans. Untested in Node: needs a live world (the checks' rules are in the models).
  */
 import { healthCollector } from "../vendor/wanderers-core/index.mjs";
@@ -12,7 +12,9 @@ import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
 import { rules, actorFacts, stateOf, grantSummaryOf, sendAndWait, builtOk } from "./path.mjs";
-import { loadTreesChecked } from "./trees.mjs";
+import { loadTreesChecked, uuidExists } from "./trees.mjs";
+import * as Drafts from "./drafts.mjs";
+import { draftLines } from "./draft-model.mjs";
 import { hasAdvancement } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
 import * as SheetPage from "./sheet-page.mjs";
@@ -24,20 +26,7 @@ export const REPORT_TIMEOUT_MS = 20000;
 /** @param {unknown} ms */
 export const reportTimeout = ms => (typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? Math.min(300000, Math.max(1000, Math.round(ms))) : REPORT_TIMEOUT_MS);
 
-/**
- * Whether a granted document exists, without loading it: a world document or a compendium index entry. Unknown (undefined) when
- * a compendium's index isn't loaded, so nothing is reported wrongly. @param {string} uuid
- */
-function exists(uuid) {
-  try {
-    if (fromUuidSync(uuid, { strict: false })) return true;
-    const p = uuid.split(".");
-    if (p[0] !== "Compendium") return false;
-    const pk = game.packs?.get(`${p[1]}.${p[2]}`);
-    if (!pk) return false;
-    return pk.index?.size ? false : undefined;
-  } catch { return undefined; }
-}
+const exists = uuidExists;
 
 /** Characters that carry picks or granted documents. */
 const withPicks = () => (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.flags?.[ID]?.[PICKS_FLAG] || existingOf(a).length);
@@ -109,6 +98,17 @@ export async function report({ timeoutMs } = {}) {
         if (n.grant.ranks.some(r => "uuid" in r && worldAdvancement(r.uuid))) add("warn", `${t.name} › ${n.name} grants an item with advancement, which doesn't run on talent grants.`);
       }
     }
+  });
+  if (F.on("editor")) await c.checkAsync("Drafts", async add => {
+    const trees = await loadTrees();
+    for (const l of draftLines(trees, Drafts.read())) add(l.level, l.text);
+    const st = Drafts.status();
+    if (!st.exists) return add("info", "The drafts journal is made on the first Save draft (GM only, in the Module data folder).");
+    if (st.count > 1) add("warn", `${st.count} drafts journals exist; only the first is used. Delete the others in the Module data folder.`);
+    if (st.playersCanSee.length) add("warn", `The drafts journal "${st.name}" is shared with ${st.playersCanSee.join(", ")}: set its ownership back to None for players.`);
+    else add("ok", "The drafts journal is GM only.");
+    const j = Drafts.Store.entry();
+    if (j && !j.folder) add("info", "The drafts journal sits at the top of the Journal sidebar; the acting GM files it into the Module data folder on their next load.");
   });
   await c.checkAsync("Characters", async add => {
     const { trees, ok } = await loadTreesChecked(); const known = new Set(trees.map(t => t.id)); const r = rules();
