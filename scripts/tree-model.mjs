@@ -217,6 +217,31 @@ export function prereqCycles(tree) {
   return out;
 }
 
+/** Whether a UUID names an active effect (world, embedded or compendium). @param {string} uuid */
+export const isEffectUuid = uuid => /(^|\.)ActiveEffect\.[A-Za-z0-9]{16}$/.test(String(uuid ?? ""));
+
+/**
+ * Whether a granted document exists, from plain lookups (pure; trees.mjs `uuidExists` passes Foundry's). `sync(uuid)` is
+ * fromUuidSync (null when it can't say), `packIndex(id)` a compendium's loaded index (a Map-like with `size`/`has`) or null.
+ * True: found. False: surely missing (no such world document, no such pack, or not in a loaded index). Undefined: can't tell
+ * without loading (index not loaded, or an effect inside a compendium item whose parent is in the index), never an error.
+ * @param {string} uuid @param {{ sync: (u: string) => unknown, packIndex: (id: string) => { size?: number, has: (k: string) => boolean } | null | undefined }} o
+ * @returns {boolean | undefined}
+ */
+export function uuidPresence(uuid, { sync, packIndex }) {
+  try {
+    if (sync(uuid)) return true;
+    const p = String(uuid ?? "").split(".");
+    if (p[0] !== "Compendium") return false;
+    const index = packIndex(`${p[1]}.${p[2]}`);
+    if (index === null) return false;
+    if (!index?.size) return undefined;
+    if (!index.has(p[4])) return false;
+    // The parent is in the index; an embedded document (e.g. Item.<id>.ActiveEffect.<id>) can't be checked without loading it.
+    return p.length > 5 ? undefined : true;
+  } catch { return undefined; }
+}
+
 /**
  * What the GM should fix in a tree: [{ level: "bad" | "warn", node?, text }]. Plain text. `has(uuid)` tells whether a granted
  * document exists (true / false; undefined = unknown, not reported). Never throws.
@@ -247,6 +272,9 @@ export function treeIssues(tree, { has } = {}) {
         const clash = tree.nodes.find(o => o !== n && o.tier === n.tier && o.col === n.col);
         if (clash && tree.nodes.indexOf(clash) > tree.nodes.indexOf(n)) out.push({ level: "warn", node: clash.id, text: `${label} and ${clash.name} share a spot in the grid.` });
       }
+      if (n.grant.mode === "item") n.grant.ranks.forEach((r, i) => {
+        if ("uuid" in r && isEffectUuid(String(r.uuid))) out.push({ level: "bad", node: n.id, text: `${label} grants items, but rank slot ${i + 1} is an active effect, so it would grant nothing: set the talent to grant effects, or drop an item there.` });
+      });
       if (n.grant.mode !== "none" && !n.grant.ranks.length) out.push({ level: "warn", node: n.id, text: `${label} grants nothing yet.` });
     }
     if (tree.layout === "board") {

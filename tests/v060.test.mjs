@@ -162,7 +162,8 @@ test("editor: talent fields, rank slots, scale vs replace", () => {
   t = ok(E.updateNode(t, "a1", { perRank: "replace" }));
   assert.equal(E.setRankSlot(t, "a1", 3, { uuid: UUID }).ok, false, "fill in order");
   t = ok(E.setRankSlot(t, "a1", 2, { built: { template: "ac", params: {}, base: 1, step: 1 } }));
-  t = ok(E.setRankSlot(t, "a1", 3, { uuid: EFFECT }));
+  assert.equal(E.setRankSlot(t, "a1", 3, { uuid: EFFECT }).ok, false, "0.6.1: an item talent with items in other slots refuses an effect");
+  t = ok(E.setRankSlot(t, "a1", 3, { uuid: UUID }));
   assert.equal(t.nodes.find((/** @type {any} */ n) => n.id === "a1").grant.ranks.length, 3);
   t = ok(E.setRankSlot(t, "a1", 1, null));
   const g = t.nodes.find((/** @type {any} */ n) => n.id === "a1").grant;
@@ -365,10 +366,7 @@ test("house: the editor is GM only, feature gated, remembered; the builder opens
   for (const f of scripts) if (f !== "drafts.mjs") assert.doesNotMatch(src(`scripts/${f}`), /createStore\(/, f);
 });
 
-test("0.6.0: version, changelog, docs", () => {
-  const m = JSON.parse(src("module.json"));
-  assert.equal(m.version, "0.6.0");
-  assert.equal(m.download, "https://github.com/cocoomg11/wanderers-path/releases/download/v0.6.0/module.zip");
+test("0.6.0: changelog, docs (the version lives in the newest version test)", () => {
   assert.match(src("CHANGELOG.md"), /^## 0\.6\.0$[\s\S]*?### Untested in Foundry/m);
   const docs = src("docs/trees.md");
   for (const h of ["## 1. The tree compendium", "## 2. The tree editor", "## 3. Linking items and effects", "## 4. Build a talent effect", "## 5. Who gets a tree", "## 6. Points", "## 7. Refunds and respec", "## Troubleshooting", "## Appendix: a tree's data"]) assert.ok(docs.includes(h), h);

@@ -8,7 +8,7 @@
 import { createStore } from "../vendor/wanderers-core/foundry/index.mjs";
 import { ID } from "./const.mjs";
 import { leader, warn } from "./core.mjs";
-import { normalizeDrafts, withDraft, withoutDraft } from "./draft-model.mjs";
+import { normalizeDrafts, withDraft, withoutDraft, evicted } from "./draft-model.mjs";
 
 export const STORE_NAME = "Wanderer's Path drafts (GM only)";
 /** The data flag and the entry's marker flag (never rename: worlds find the entry by them). */
@@ -24,8 +24,17 @@ export const Store = createStore(ID, {
 /** The drafts (GM; players get the empty store). @returns {import("./draft-model.mjs").DraftStore} */
 export const read = () => (game.user?.isGM ? normalizeDrafts(Store.read()) : normalizeDrafts(null));
 
-/** Saves a tree as its draft (GM click). @param {import("./tree-model.mjs").Tree} tree @param {import("./tree-model.mjs").Tree | null} published */
-export const save = (tree, published) => Store.update(d => withDraft(d, tree, { published, at: Date.now() }));
+/**
+ * Saves a tree as its draft (GM click). Resolves to the drafts the save dropped past the cap (oldest first to go), usually none;
+ * rejects with the store's reason (e.g. its size limit).
+ * @param {import("./tree-model.mjs").Tree} tree @param {import("./tree-model.mjs").Tree | null} published
+ * @returns {Promise<{ id: string, name: string }[]>}
+ */
+export async function save(tree, published) {
+  /** @type {{ id: string, name: string }[]} */ let lost = [];
+  await Store.update(d => { const next = withDraft(d, tree, { published, at: Date.now() }); lost = evicted(d, next, tree.id); return next; });
+  return lost;
+}
 
 /** Drops a tree's draft (GM click). Nothing is written when there is none. @param {string} id */
 export async function discard(id) {

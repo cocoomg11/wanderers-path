@@ -5,7 +5,7 @@
  */
 import { ID, TREE_FLAG } from "./const.mjs";
 import { S, log, warn, onRulesChanged } from "./core.mjs";
-import { normalizeTree } from "./tree-model.mjs";
+import { normalizeTree, uuidPresence } from "./tree-model.mjs";
 
 /** @typedef {import("./tree-model.mjs").Tree} Tree */
 
@@ -74,19 +74,17 @@ export async function loadTreesChecked() {
 }
 
 /**
- * Whether a granted document exists, without loading it: a world document or a compendium index entry. Unknown (undefined) when
- * a compendium's index isn't loaded, so nothing is reported wrongly. Used by the health check and the editor's Publish.
+ * Whether a granted document exists, without loading it: a world document or a compendium index entry (rules: tree-model
+ * `uuidPresence`). Unknown (undefined) when a compendium's index isn't loaded, or for an effect inside a compendium item whose item
+ * is in the index (fromUuidSync can't reach embedded documents of an index entry), so nothing is reported wrongly. Used by the
+ * health check and the editor's Publish.
  * @param {string} uuid @returns {boolean | undefined}
  */
 export function uuidExists(uuid) {
-  try {
-    if (fromUuidSync(uuid, { strict: false })) return true;
-    const p = uuid.split(".");
-    if (p[0] !== "Compendium") return false;
-    const pk = game.packs?.get(`${p[1]}.${p[2]}`);
-    if (!pk) return false;
-    return pk.index?.size ? false : undefined;
-  } catch { return undefined; }
+  return uuidPresence(uuid, {
+    sync: u => { try { return fromUuidSync(u, { strict: false }); } catch { return null; } },
+    packIndex: id => { const pk = game.packs?.get(id); return pk ? (pk.index ?? { size: 0, has: () => false }) : null; }
+  });
 }
 
 /** Hooks that invalidate the cache (init, feature on). Each bails out unless the change is in our pack. */

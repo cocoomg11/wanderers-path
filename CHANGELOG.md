@@ -2,6 +2,27 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.6.1
+
+Fixes before release: 0.6.0 was never published, so the 0.6.1 release carries the tree editor (0.6.0 below) with these fixes.
+
+- **Publish no longer refuses effects taken from compendium items.** A grant like `Compendium.<pack>.Item.<id>.ActiveEffect.<id>` was reported as "a document that no longer exists" once the pack's index was loaded (the editor loads it). Now the item is looked up in the index; when it is there, the effect counts as "can't check without loading", which is never an error. A missing item is still reported.
+- **Closing the editor and discarding the unsaved changes really discards them.** Reopening showed the discarded edits (and the next Save draft or Publish wrote them); the working copy and the undo history are now dropped.
+- **An item talent can't hold an active effect any more.** Dropping an effect onto a talent that grants items switches it to granting effects; when another rank slot holds an item, the drop is refused with a notice. A tree that already has an effect under "grants an item" shows an error (it granted nothing) and can't be published until fixed.
+- **Publish warns when the published tree changed** since the draft was started (or since you opened it, with no draft): another GM, or an edit elsewhere. Publishing still replaces it, but now you know.
+- **Fix buttons in the Settings window run once on a double-click.** The button is busy from the first click, so a second click no longer opens a second confirm; No or closing the confirm frees it again.
+- Smaller fixes: a refused tree switch (keeping unsaved changes) no longer selects or builds on a talent of the other tree; items and effects dragged from a character or token are refused with "drag it from the Items sidebar or a compendium" (a grant must not depend on one actor), and an unreadable drop says the same; Delete says when the tree wasn't found in the compendium instead of "deleted"; a draft dropped past the 50-draft limit is named in a notice; a draft that can't be saved says why (e.g. the store's size limit).
+
+### Untested in Foundry
+
+- [ ] Publish a talent whose grant is an effect inside a compendium item, after the editor has loaded the pack indexes: no "no longer exists" error, it publishes and grants the effect. Delete that item from the compendium: the error appears.
+- [ ] Edit a tree, close the editor, answer Yes to discard; reopen: the saved state, no Undo.
+- [ ] Drop an effect onto the slot of an "item" talent with one slot: it switches to effects. On a per-rank talent with an item in another slot: refused with the notice.
+- [ ] Start a draft of a published tree, publish another change from a second GM (or the console), then Publish the draft: the confirm warns that the published tree changed.
+- [ ] Settings › Run check with a Fix line: double-click Fix: one confirm; Yes runs it once (`wanderers-path.done` fires once); No frees the button.
+- [ ] Drag an item from a character sheet onto the grid: refused with the sidebar/compendium notice.
+- [ ] Delete a published tree whose entry was already removed from the compendium: the "wasn't found" notice.
+
 ## 0.6.0
 
 The GM tree editor: make and change talent trees without touching data by hand.

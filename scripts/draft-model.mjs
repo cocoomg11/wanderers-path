@@ -71,6 +71,21 @@ export function withDraft(store, tree, { published = null, at = Date.now() } = {
   return normalizeDrafts(s);
 }
 
+/**
+ * Drafts that were in `before` but not in `after` (other than `keep`): the ones a save dropped past DRAFTS_MAX. Pure.
+ * @param {unknown} before @param {unknown} after @param {string} [keep] @returns {{ id: string, name: string }[]}
+ */
+export function evicted(before, after, keep = "") {
+  const b = normalizeDrafts(before), a = normalizeDrafts(after);
+  return Object.values(b.drafts).filter(d => d.tree.id !== keep && !a.drafts[d.tree.id]).map(d => ({ id: d.tree.id, name: d.tree.name || d.tree.id }));
+}
+
+/** The words for a failed draft save (the store's own reason, e.g. its size limit, without the module id prefix). @param {unknown} e */
+export function saveErrorText(e) {
+  const m = String(/** @type {any} */ (e)?.message ?? e ?? "").replace(/^[\w-]+:\s*/, "").trim().slice(0, 160);
+  return m ? `couldn't save the draft: ${m}.`.replace(/\.\.$/, ".") : "couldn't save the draft.";
+}
+
 /** The store without that tree's draft. @param {unknown} store @param {string} id @returns {DraftStore} */
 export function withoutDraft(store, id) {
   const s = normalizeDrafts(store);

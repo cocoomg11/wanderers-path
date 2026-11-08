@@ -9,8 +9,9 @@
  * `treePageHTML` is the readable page written next to the tree's data in the compendium.
  */
 import { esc, slug } from "../vendor/wanderers-core/index.mjs";
-import { normalizeTree, emptyTree, treeIssues, MAX_NODES, MAX_RANKS, MAX_COST, MAX_LEVEL, NAME_MAX, TEXT_MAX, IMG_MAX, IDENT_RE } from "./tree-model.mjs";
+import { normalizeTree, emptyTree, treeIssues, isEffectUuid, MAX_NODES, MAX_RANKS, MAX_COST, MAX_LEVEL, NAME_MAX, TEXT_MAX, IMG_MAX, IDENT_RE } from "./tree-model.mjs";
 import { specIssues, templateOf, previewLine } from "./builder-model.mjs";
+import { draftState, treeHash } from "./draft-model.mjs";
 
 /** @typedef {import("./tree-model.mjs").Tree} Tree */
 /** @typedef {import("./tree-model.mjs").TalentNode} TalentNode */
@@ -228,6 +229,23 @@ export function updateNode(tree, id, f) {
 }
 
 /**
+ * Whether a dropped UUID belongs to an actor (a character's item or effect, or a token's): the editor refuses those, since a grant
+ * would then depend on that one actor. Sidebar items and compendium documents are fine. Pure. @param {unknown} uuid
+ */
+export const ownedSource = uuid => /^(Actor\.|Scene\.|Compendium\.[^.]+\.[^.]+\.Actor\.)/.test(String(uuid ?? ""));
+
+/**
+ * Whether Publish would replace a published tree that changed after the work began: the draft's own `stale` (its base differs),
+ * else, with no draft, the hash taken when the published tree was opened (`base`). Pure.
+ * @param {{ draft: import("./draft-model.mjs").Draft | null, published: Tree | null, base?: string | null }} o
+ */
+export function publishStale({ draft, published, base = null }) {
+  if (!published) return false;
+  if (draft) return draftState(draft, published).stale;
+  return !!base && base !== treeHash(published);
+}
+
+/**
  * A rank slot (1-based) set to a document (`{ uuid }`), a built spec (`{ built }`), or emptied (null: later slots move up).
  * "scale" talents use slot 1; "replace" talents slots 1 to max ranks, filled in order.
  * @param {Tree} tree @param {string} id @param {number} slot @param {{ uuid: string } | { built: Record<string, any> } | null} value @returns {EditResult}
@@ -242,8 +260,16 @@ export function setRankSlot(tree, id, slot, value) {
   if (s > n.grant.ranks.length + 1) return fail(`Fill rank ${n.grant.ranks.length + 1} first.`);
   if ("uuid" in value) {
     if (!DOC_UUID_RE.test(String(value.uuid))) return fail("That isn't an Item or Active Effect UUID.");
+    const isEffect = isEffectUuid(String(value.uuid));
+    if (n.grant.mode === "item" && isEffect) {
+      // An item talent can't grant an effect: switch the talent to effects, unless another slot needs it to stay an item.
+      const others = n.grant.ranks.filter((_r, i) => i !== s - 1);
+      const needsItem = others.some(r => ("uuid" in r && !isEffectUuid(String(r.uuid))) || ("built" in r && !!templateOf(r.built?.template)?.itemOnly));
+      if (needsItem) return fail("That's an active effect, but this talent grants items and its other rank slots hold items: drop an item here, or clear those slots first.");
+      n.grant.mode = "effect";
+    }
     n.grant.ranks[s - 1] = { uuid: String(value.uuid) };
-    if (n.grant.mode === "none") n.grant.mode = /ActiveEffect\.[A-Za-z0-9]{16}$/.test(String(value.uuid)) ? "effect" : "item";
+    if (n.grant.mode === "none") n.grant.mode = isEffect ? "effect" : "item";
   } else if (isObj(value.built)) n.grant.ranks[s - 1] = { built: structuredClone(value.built) };
   else return fail("Nothing to put in that slot.");
   return done(t);

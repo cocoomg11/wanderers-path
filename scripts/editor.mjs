@@ -18,7 +18,7 @@ import { F, S, log, warn } from "./core.mjs";
 import { normalizeTree } from "./tree-model.mjs";
 import * as E from "./editor-model.mjs";
 import { editorHTML, sourcesHTML, searchDocs, readFieldName } from "./editor-view-model.mjs";
-import { treeList, draftState, changeSummary } from "./draft-model.mjs";
+import { DRAFTS_MAX, treeList, draftState, changeSummary, treeHash, saveErrorText } from "./draft-model.mjs";
 import { hasAdvancement } from "./grants-model.mjs";
 import * as Drafts from "./drafts.mjs";
 import { loadTrees, pack, invalidate, onTreesChanged, uuidExists } from "./trees.mjs";
@@ -41,6 +41,8 @@ const dialog = { classes: ["wp-window", ...UI_CLASSES], rejectClose: false };
 const confirm = (title, html) => DialogV2.confirm({ ...dialog, window: { title }, content: html });
 /** @param {string} text */
 const warnUser = text => ui.notifications.warn(`${TITLE}: ${text}`);
+/** Tells the GM which drafts a save dropped past the cap. @param {{ name: string }[]} lost */
+const warnEvicted = lost => { if (lost?.length) warnUser(`the drafts are full (at most ${DRAFTS_MAX}): the oldest ${lost.length === 1 ? "draft was" : "drafts were"} dropped (${lost.map(d => d.name).join(", ")}).`); };
 
 /** Characters with ranks in a tree (by node, or any node when `nodes` is null). @param {string} treeId @param {string[] | null} [nodes] */
 function rankHolders(treeId, nodes = null) {
@@ -78,6 +80,7 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
   linkMode = false;
   search = "";
   busy = false;
+  /** @type {string | null} hash of the published tree the working copy was opened from (no draft yet), for Publish's stale warning */ base = null;
   /** @type {Promise<any[]> | null} */ #sources = null;
   /** @type {Promise<any> | null} */ #classes = null;
   /** @type {Map<string, { name: string, img?: string }>} */ #labels = new Map();
@@ -91,7 +94,7 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     const draft = this.current ? store.drafts[this.current] ?? null : null;
     if (this.current && !this.work) {
       const t = draft?.tree ?? pub;
-      if (t) this.work = normalizeTree(t); else this.current = null;
+      if (t) { this.work = normalizeTree(t); this.base = draft ? null : pub ? treeHash(pub) : null; } else this.current = null;
     }
     if (this.work && this.selected && !this.work.nodes.some(n => n.id === this.selected)) this.selected = null;
     const sel = this.work && this.selected ? this.work.nodes.find(n => n.id === this.selected) ?? null : null;
@@ -140,7 +143,8 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     if (this.dirty && !options?.force && game.user?.isGM) {
       const ok = await confirm("Unsaved changes", `<p>Close the editor without saving the draft of <strong>${esc(this.work?.name ?? "")}</strong>?</p>`);
       if (!ok) return this;
-      this.dirty = false;
+      // The window is one shared instance: drop the discarded working copy and its undo history, so reopening reads the saved state.
+      this.dirty = false; this.work = null; this.history = E.emptyHistory(); this.selected = null; this.linkMode = false; this.base = null;
     }
     return super.close(options);
   }
@@ -163,7 +167,7 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
   async #switchTo(id) {
     if (id === this.current) return true;
     if (this.dirty && !(await confirm("Unsaved changes", `<p>Drop the unsaved changes to <strong>${esc(this.work?.name ?? "")}</strong>?</p>`))) return false;
-    this.current = id; this.work = null; this.dirty = false; this.history = E.emptyHistory(); this.selected = null; this.linkMode = false;
+    this.current = id; this.work = null; this.dirty = false; this.history = E.emptyHistory(); this.selected = null; this.linkMode = false; this.base = null;
     return true;
   }
 
@@ -296,8 +300,9 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
       return this.#edit(E.moveNode(this.work, data.node, at));
     }
     if ((data?.type !== "Item" && data?.type !== "ActiveEffect") || typeof data.uuid !== "string") return warnUser("drop an item or an active effect.");
+    if (E.ownedSource(data.uuid)) return warnUser("that comes from a character or token: drag it from the Items sidebar or a compendium, so the talent doesn't depend on one actor.");
     const doc = await this.#readDoc(data.uuid);
-    if (!doc) return warnUser("that document can't be read (or isn't an item or effect).");
+    if (!doc) return warnUser("that document can't be read (or isn't an item or effect): drag it from the Items sidebar or a compendium.");
     if (doc.advancement) warnUser(`${doc.name} has dnd5e advancement, which doesn't run on talent grants: add what it would give by hand.`);
     if (slotEl && this.selected) return this.#edit(E.setRankSlot(this.work, this.selected, Number(slotEl.dataset.wpSlot), { uuid: doc.uuid }));
     if (!cellEl) return;
@@ -348,7 +353,7 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
 
   /** A new tree goes straight into the drafts, so it shows in the list. @param {import("./tree-model.mjs").Tree} tree */
   async #saveNew(tree) {
-    try { await Drafts.save(tree, null); } catch (e) { warn("editor: save draft", e); return warnUser("couldn't save the draft."); }
+    try { warnEvicted(await Drafts.save(tree, null)); } catch (e) { warn("editor: save draft", e); return warnUser(saveErrorText(e)); }
     this.current = tree.id; this.work = tree; this.dirty = false; this.render();
   }
 
@@ -365,16 +370,19 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     if (!(await confirm("Delete tree", `<p>Delete the published tree <strong>${esc(tree.name)}</strong> from the compendium${Drafts.read().drafts[tree.id] ? " and its draft" : ""}? Players lose it at once.</p>${warnText}`))) return;
     self.busy = true; self.render();
     try {
+      let found = false;
       const ok = await self.#withPack(async p => {
         const entry = await self.#entryOf(p, tree.id);
-        if (entry) await entry.delete();
+        if (entry) { await entry.delete(); found = true; }
       });
       if (!ok) return;
+      const hadDraft = !!Drafts.read().drafts[tree.id];
       await Drafts.discard(tree.id);
       invalidate();
-      log(`editor: deleted tree ${tree.id}`);
+      log(`editor: deleted tree ${tree.id}${found ? "" : " (not found in the compendium)"}`);
       self.dirty = false; await self.#switchTo(null);
-      ui.notifications.info(`${TITLE}: ${tree.name} deleted.`);
+      if (found) ui.notifications.info(`${TITLE}: ${tree.name} deleted.`);
+      else warnUser(`${tree.name} wasn't found in the tree compendium (already deleted, or the compendium changed)${hadDraft ? "; its draft was deleted" : ""}.`);
       if (holders.length && await confirm("Refund orphans", `<p>Refund the ranks those characters had in <strong>${esc(tree.name)}</strong> now, and remove what they granted? (Also offered later by the health check.)</p>`)) {
         const r = await sendAndWait("pathOrphans", {});
         ui.notifications.info(`${TITLE}: ${r === false ? "Refund orphans couldn't be sent." : r === "timeout" ? "Refund orphans sent; the GM client hasn't answered yet." : "orphans refunded."}`);
@@ -418,8 +426,8 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     const self = /** @type {EditorWindow} */ (/** @type {unknown} */ (this));
     if (!self.work || self.busy) return;
     self.busy = true;
-    try { await Drafts.save(self.work, await self.#published()); self.dirty = false; ui.notifications.info(`${TITLE}: draft saved.`); }
-    catch (e) { warn("editor: save draft", e); warnUser("couldn't save the draft."); }
+    try { const lost = await Drafts.save(self.work, await self.#published()); self.dirty = false; self.base = null; ui.notifications.info(`${TITLE}: draft saved.`); warnEvicted(lost); }
+    catch (e) { warn("editor: save draft", e); warnUser(saveErrorText(e)); }
     finally { self.busy = false; self.render(); }
   }
 
@@ -449,6 +457,8 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     const li = (/** @type {string[]} */ l) => l.length ? `<ul>${l.slice(0, 8).map(x => `<li>${esc(x)}</li>`).join("")}${l.length > 8 ? `<li>… ${l.length - 8} more</li>` : ""}</ul>` : "";
     const parts = [`<p>Publish <strong>${esc(tree.name)}</strong>${pub ? " over the published version" : ""}? Characters who see it get the new version at once; their granted items follow on their next change, or with Refresh granted items.</p>`];
     if (pub) parts.push(`<p>${[ch.added.length ? `${ch.added.length} added` : "", ch.changed.length ? `${ch.changed.length} changed` : "", ch.removed.length ? `${ch.removed.length} removed` : "", ch.settings ? "tree settings changed" : ""].filter(Boolean).join(", ") || "No changes"}.</p>`);
+    const draft = Drafts.read().drafts[tree.id] ?? null;
+    if (pub && E.publishStale({ draft, published: pub, base: self.base })) parts.push(`<p class="wp-warn">The published <strong>${esc(pub.name)}</strong> changed since ${draft ? "this draft was started" : "you opened it"} (another GM, or an edit elsewhere). Publishing replaces that version with this one.</p>`);
     if (removedHeld.length) parts.push(`<p class="wp-warn">${removedHeld.length} ${removedHeld.length === 1 ? "character has" : "characters have"} ranks in removed talents (${esc(ch.removed.map(r => r.name).join(", "))}): those become orphans until refunded (health check › Refund orphans).</p>`);
     if (plan.warnings.length) parts.push(`<p>Warnings (publishing is still allowed):</p>${li(plan.warnings.map(w => w.text))}`);
     if (!(await confirm("Publish tree", parts.join("")))) return;
@@ -472,7 +482,7 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
       await Drafts.discard(tree.id);
       invalidate();
       log(`editor: published ${tree.id} (${tree.nodes.length} talents)`);
-      self.work = tree; self.dirty = false;
+      self.work = tree; self.dirty = false; self.base = treeHash(tree);
       ui.notifications.info(`${TITLE}: ${tree.name} published.${removedHeld.length ? " Some characters now have orphan ranks: the health check offers Refund orphans." : ""}`);
     } catch (e) { warn("editor: publish", e); warnUser(`publishing failed (${String(/** @type {any} */ (e)?.message ?? e).slice(0, 120)}).`); }
     finally { self.busy = false; self.render(); }
@@ -569,7 +579,11 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
 
   /** Opens a tree (and optionally one talent and rank slot, which opens the builder). @param {string | null} [treeId] @param {{ node?: string, slot?: number }} [o] */
   async show(treeId, { node, slot } = {}) {
-    if (treeId && treeId !== this.current) await this.#switchTo(treeId);
+    if (treeId && treeId !== this.current && !(await this.#switchTo(treeId))) {
+      // The GM kept the unsaved changes: stay on the current tree, and don't select (or build on) a talent of another tree.
+      await this.render({ force: true });
+      return this;
+    }
     if (node) this.selected = node;
     await this.render({ force: true });
     if (node && slot && this.work?.nodes.some(n => n.id === node)) this.#build(node, slot);

@@ -60,6 +60,8 @@ With no talent selected the inspector shows the **tree settings**: name, image, 
 
 Each rank slot holds a document, or a built effect from the builder.
 
+An *item* talent can't hold an active effect (it would grant nothing): dropping an effect onto one switches it to *An effect*, or is refused when another rank slot holds an item. Drag documents from the Items sidebar or a compendium, not from a character sheet: a grant must not depend on one actor.
+
 - *One grant for every rank* (`perRank: "scale"`, default): one copy, kept as ranks rise. A multi-rank item is renamed "Name (2/3)". Only the first slot is used unless the slot is built.
 - *A different one per rank* (`perRank: "replace"`): one slot per rank. Rank 2 swaps the rank-1 copy for the rank-2 document.
 

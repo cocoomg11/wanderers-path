@@ -103,11 +103,15 @@ export class SettingsWindow extends RememberedWindow(ApplicationV2, { moduleId: 
     if (!game.user?.isGM || self.busy) return;
     const key = String(target?.dataset?.fix ?? ""); const f = fixAt(self.report, key);
     if (!f) { ui.notifications.warn(`${TITLE}: that fix is no longer offered; run the check again.`); return; }
+    // Busy from the first click, before the confirm: a second click (double-click) is ignored instead of opening a second dialog.
+    self.busy = key;
     if (f.confirm) {
-      const ok = await DialogV2.confirm({ classes: ["wp-window", ...UI_CLASSES], window: { title: f.label }, content: `<p>${esc(f.confirm)}</p>`, rejectClose: false });
-      if (!ok) return;
+      let ok = false;
+      try { ok = !!(await DialogV2.confirm({ classes: ["wp-window", ...UI_CLASSES], window: { title: f.label }, content: `<p>${esc(f.confirm)}</p>`, rejectClose: false })); }
+      catch (e) { console.warn(`${ID} | fix confirm`, e); }
+      if (!ok) { self.busy = null; return; }
     }
-    self.busy = key; self.render();
+    self.render();
     try { self.fixed = fixNotice(f.label, await f.run()); }
     catch (e) { console.warn(`${ID} | fix`, e); self.fixed = { level: "warn", text: `${f.label}: failed (${String(/** @type {any} */ (e)?.message ?? e).slice(0, 120)}).` }; }
     try { self.report = await Health.report(); } catch (e) { console.warn(`${ID} | health`, e); }
