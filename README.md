@@ -2,7 +2,7 @@
 
 Customizable talent trees and spec boards for the dnd5e system in [Foundry VTT](https://foundryvtt.com). The GM builds the boards (the base shape, the nodes, what each node grants); each character spends points on them.
 
-**Status: in development.** Version 0.6.1: the GM tree editor (drop items and effects onto a grid, link requirements, save drafts, publish), the classic tiered talent window, learning and refunds through the GM, the grant engine (learned talents give the character copies of the items or effects their nodes point to; refunds take them back), a Talents page on Wanderer's Toolkit's character sheet, and the feature builder (talent effects and features built from plain-language templates). A later version adds the board layout. What changed in each version: [CHANGELOG](CHANGELOG.md).
+**Status: in development.** Version 0.6.2: the GM tree editor (drop items and effects onto a grid, link requirements, save drafts, publish), the classic tiered talent window, learning and refunds through the GM, the grant engine (learned talents give the character copies of the items or effects their nodes point to; refunds take them back), a Talents page on Wanderer's Toolkit's character sheet, and the feature builder (talent effects and features built from plain-language templates). A later version adds the board layout. What changed in each version: [CHANGELOG](CHANGELOG.md).
 
 ## No content included
 

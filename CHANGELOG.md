@@ -2,6 +2,25 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.6.2
+
+Fixes from the live test of 0.6.1.
+
+- **Escape and Ctrl+Z work in the tree editor after a click.** A click that redraws the editor replaced the focused button, so focus fell back to the page: Escape went to Foundry (which asked to close the editor) instead of leaving link mode, and Ctrl+Z did nothing. Focus now returns to the same control (or the editor window) after each redraw, and while the editor is open Escape (in link mode) and Ctrl+Z (with something to undo) are caught before Foundry's key bindings, unless you are typing in a field or working in another window. Escape outside link mode still does what Foundry does.
+- **The title bar's stale-draft badge is complete:** *Draft · published tree changed*, with the full sentence on hover.
+- **Health warns when a granted source no longer exists.** The Characters section said the granted items were "all in step" while a talent pointed at a deleted item or effect (Refresh then reported "1 missing"). It now names the missing sources per character and says the existing copies are kept.
+- Deleting a tree that isn't in the tree compendium no longer says "It was never published": it says the tree isn't in the compendium, and names how many characters still have points in it.
+
+### Untested in Foundry
+
+- [ ] Editor: select a talent, Link mode, click another talent (the window redraws), press Escape: link mode ends, no "close the editor" question. Escape again (not in link mode): Foundry's usual close.
+- [ ] Editor: make an edit, click an empty spot or a talent, press Ctrl+Z: the edit is undone. Ctrl+Z while typing in a field of the editor or of another window: the field's own undo.
+- [ ] After a click on a talent or a toolbar button, `document.activeElement` is that control again (or the editor window), not the page body.
+- [ ] Start a draft, change the published tree from the console: the title badge reads *Draft · published tree changed*; hovering it shows the full sentence.
+- [ ] Grant a talent from a world item, delete the item, run the health check: a warn line under Characters names the missing source; the summary line no longer says "all in step".
+- [ ] Delete a tree with no compendium entry (e.g. a draft whose published entry was removed by hand): the confirm says it isn't in the tree compendium, and counts characters with points in it.
+- [ ] Build… on a slot of a one-rank talent: the builder header shows "Tree › Talent" (a per-rank talent shows "· rank N", a multi-rank talent with one grant "· all N ranks").
+
 ## 0.6.1
 
 Fixes before release: 0.6.0 was never published, so the 0.6.1 release carries the tree editor (0.6.0 below) with these fixes.

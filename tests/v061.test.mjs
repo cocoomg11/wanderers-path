@@ -102,10 +102,3 @@ test("lows: switch refusal, actor-owned drops, delete not found, drafts cap and 
   assert.equal(D.saveErrorText(null), "couldn't save the draft.");
   assert.doesNotMatch(ed, /warnUser\("couldn't save the draft\."\)/);
 });
-
-test("0.6.1: version and changelog", () => {
-  const m = JSON.parse(src("module.json"));
-  assert.equal(m.version, "0.6.1");
-  assert.equal(m.download, "https://github.com/cocoomg11/wanderers-path/releases/download/v0.6.1/module.zip");
-  assert.match(src("CHANGELOG.md"), /^## 0\.6\.1$[\s\S]*?### Untested in Foundry[\s\S]*?^## 0\.6\.0$/m);
-});

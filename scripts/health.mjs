@@ -11,11 +11,11 @@ import { automationNodes, automationLines } from "./automation-model.mjs";
 import { treeIssues } from "./tree-model.mjs";
 import * as P from "./picks-model.mjs";
 import { loadTrees, pack, packId } from "./trees.mjs";
-import { rules, actorFacts, stateOf, grantSummaryOf, sendAndWait, builtOk } from "./path.mjs";
+import { rules, actorFacts, stateOf, grantSummaryOf, sendAndWait, builtOk, desiredOf } from "./path.mjs";
 import { loadTreesChecked, uuidExists } from "./trees.mjs";
 import * as Drafts from "./drafts.mjs";
 import { draftLines } from "./draft-model.mjs";
-import { hasAdvancement } from "./grants-model.mjs";
+import { hasAdvancement, missingSources } from "./grants-model.mjs";
 import { existingOf } from "./grants.mjs";
 import * as SheetPage from "./sheet-page.mjs";
 import { pageStatus } from "./sheet-page-model.mjs";
@@ -46,6 +46,11 @@ export const FIXES = {
   refresh: () => ({ label: "Refresh granted items", confirm: "Make every character's granted items and effects match their learned talents again (copies whose source changed are made again; untagged items are never touched)?", run: () => runAndWait("pathRefresh", "Refresh granted items") }),
   orphans: () => ({ label: "Refund orphans", confirm: "Refund every rank in trees or talents that are no longer published, for every character, and remove what those ranks granted?", run: () => runAndWait("pathOrphans", "Refund orphans") })
 };
+
+/** The missing UUID sources of a character's desired grants (never throws). @param {any} st */
+function missingOf(st) {
+  try { return missingSources(desiredOf(st), exists); } catch { return []; }
+}
 
 /**
  * Whether a world item (by UUID, already loaded) carries dnd5e advancement; undefined for compendium documents (only their index is
@@ -112,7 +117,7 @@ export async function report({ timeoutMs } = {}) {
   });
   await c.checkAsync("Characters", async add => {
     const { trees, ok } = await loadTreesChecked(); const known = new Set(trees.map(t => t.id)); const r = rules();
-    const list = withPicks(); let bad = 0; let outOfSync = 0, grantedChars = 0, granted = 0;
+    const list = withPicks(); let bad = 0; let outOfSync = 0, grantedChars = 0, granted = 0, missing = 0;
     for (const a of list) {
       const picks = P.normalizePicks(a.flags?.[ID]?.[PICKS_FLAG]);
       const orphans = Object.keys(picks.ranks).filter(id => !known.has(id));
@@ -120,12 +125,15 @@ export async function report({ timeoutMs } = {}) {
       if (ok && (orphans.length || lost)) { bad++; add("warn", `${a.name} has points in ${orphans.length ? `${orphans.length === 1 ? "a tree" : "trees"} no longer published (${orphans.join(", ")})` : `${lost} ${lost === 1 ? "talent" : "talents"} a tree no longer has`}.`, FIXES.orphans()); }
       const pts = P.pointsFor({ level: actorFacts(a).level, picks, trees, rules: r });
       if (pts.available < 0) { bad++; add("warn", `${a.name} has spent ${-pts.available} more ${pts.available === -1 ? "point" : "points"} than they have (a lower level or a smaller award?).`); }
-      const g = grantSummaryOf(a, await stateOf(a), ok);
+      const st = await stateOf(a);
+      const g = grantSummaryOf(a, st, ok);
+      const gone = ok ? missingOf(st) : [];
+      if (gone.length) { missing++; bad++; add("warn", `${a.name}: ${gone.length} granted ${gone.length === 1 ? "source no longer exists" : "sources no longer exist"} (${gone.slice(0, 3).join(", ")}${gone.length > 3 ? ", …" : ""}). Existing copies are kept; Refresh can't make them again. Point the talent at another document (Tree editor) and publish.`); }
       granted += g.count; if (g.count) grantedChars++;
       if (g.outOfSync) { outOfSync++; bad++; add("warn", `${a.name}: ${g.outOfSync} granted ${g.outOfSync === 1 ? "document is" : "documents are"} out of step with the learned talents.`, FIXES.refresh()); }
       if (g.advancement.length) add("warn", `${a.name}: ${g.advancement.join(", ")} ${g.advancement.length === 1 ? "has" : "have"} advancement, which doesn't run on talent grants.`);
     }
-    if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
+    if (granted) add("info", `${granted} granted ${granted === 1 ? "item or effect" : "items and effects"} on ${grantedChars} ${grantedChars === 1 ? "character" : "characters"}${outOfSync || missing ? "" : ", all in step"}. A copy whose source changed is made again only by Refresh granted items.`, outOfSync ? undefined : FIXES.refresh());
     if (!ok && packId()) add("warn", "The tree compendium can't be read: granted items are kept as they are until it can.");
     else if (!packId() && granted) add("info", "No tree compendium is chosen: granted items are kept as they are until one is.");
     if (!bad) add("ok", list.length ? `${list.length} ${list.length === 1 ? "character has" : "characters have"} talents; nothing to fix.` : "No character has learned talents yet.");

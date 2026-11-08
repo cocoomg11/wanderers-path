@@ -97,7 +97,7 @@ export function withoutDraft(store, id) {
  * A tree's state in the editor: "published" (no draft), "new" (a draft never published), "same" (a draft equal to the published
  * tree), "differs" (a draft with changes to publish). `stale`: the published tree changed since the draft was started.
  * @param {Draft | null | undefined} draft @param {Tree | null | undefined} published
- * @returns {{ state: "published" | "new" | "same" | "differs", stale: boolean, label: string }}
+ * @returns {{ state: "published" | "new" | "same" | "differs", stale: boolean, label: string, tip?: string }}
  */
 export function draftState(draft, published) {
   if (!draft) return { state: "published", stale: false, label: "Published" };
@@ -105,7 +105,9 @@ export function draftState(draft, published) {
   const ph = treeHash(published);
   const stale = !!draft.base && draft.base !== ph;
   if (treeHash(draft.tree) === ph) return { state: "same", stale: false, label: "Draft, same as published" };
-  return { state: "differs", stale, label: stale ? "Draft differs; the published tree changed since" : "Draft differs from published" };
+  return stale
+    ? { state: "differs", stale, label: "Draft · published tree changed", tip: "This draft differs from the published tree, and the published tree changed since the draft was started." }
+    : { state: "differs", stale, label: "Draft differs from published" };
 }
 
 /**

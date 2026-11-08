@@ -261,6 +261,17 @@ export function orphanRanks(picks, trees) {
 }
 
 /**
+ * The UUID sources of desired grants that no longer exist (0.6.2): unique UUIDs (built slots skipped) for which `has(uuid)` is
+ * false. Unknown (`undefined`, an index not loaded) never counts. An existing copy of a missing source is kept by reconcile.
+ * @param {Grant[]} desired @param {(uuid: string) => boolean | undefined} has
+ */
+export function missingSources(desired, has) {
+  const out = new Set();
+  for (const g of desired) { if (g.built || !g.src || g.src.startsWith("built:")) continue; if (!out.has(g.src) && has(g.src) === false) out.add(g.src); }
+  return [...out];
+}
+
+/**
  * What the GM box shows about a character's granted documents, from a structural plan (no sources loaded): { count, outOfSync,
  * advancement: names of granted items that carry dnd5e advancement }.
  * @param {Grant[]} desired @param {(Existing & { advancement?: boolean })[]} existing @param {{ keepTree?: (tree: string) => boolean }} [o]

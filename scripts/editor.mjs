@@ -117,12 +117,29 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     // Keep the canvas's scroll position across redraws.
     const old = content.querySelector(".wp-ed-canvas"); const top = old?.scrollTop ?? 0, left = old?.scrollLeft ?? 0;
     const insp = content.querySelector(".wp-ed-insp"); const itop = insp?.scrollTop ?? 0;
+    // Focus (0.6.2): the redraw replaces the focused control; find it again by a stable selector, else focus the window, so Escape
+    // and Ctrl+Z still reach the editor and not Foundry.
+    const act = /** @type {HTMLElement | null} */ (document.activeElement);
+    const hadFocus = !!act && act !== document.body && (content.contains(act) || act === this.element);
+    const sel = hadFocus && content.contains(act) ? E.focusSelector({ ...(act?.dataset ?? {}), name: /** @type {HTMLInputElement} */ (act).name || undefined }) : null;
     content.replaceChildren(result);
+    if (hadFocus) this.#refocus(content, sel);
     const c = content.querySelector(".wp-ed-canvas"); if (c) { c.scrollTop = top; c.scrollLeft = left; }
     const i = content.querySelector(".wp-ed-insp"); if (i && this.#keepInspector) i.scrollTop = itop;
     this.#keepInspector = true;
   }
   #keepInspector = true;
+
+  /** Focuses the control `sel` finds in `content`, else the window itself (tabindex -1). @param {HTMLElement} content @param {string | null} sel */
+  #refocus(content, sel) {
+    /** @type {HTMLElement | null} */ let el = null;
+    try { el = sel ? /** @type {HTMLElement | null} */ (content.querySelector(sel)) : null; } catch { el = null; }
+    const target = el && !(/** @type {any} */ (el).disabled) ? el : /** @type {HTMLElement | null} */ (this.element);
+    target?.focus?.({ preventScroll: true });
+  }
+
+  /** The document-level key listener while the editor is open (0.6.2); null when not added. @type {((ev: KeyboardEvent) => void) | null} */
+  #docKey = null;
 
   /** @param {any} context @param {any} options */
   async _onFirstRender(context, options) {
@@ -130,7 +147,10 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     const root = /** @type {HTMLElement} */ (this.element);
     root.addEventListener("change", ev => this.#onChange(/** @type {HTMLInputElement} */ (ev.target)));
     root.addEventListener("input", ev => { const el = /** @type {HTMLInputElement} */ (ev.target); if (el?.name === "search") this.#onSearch(el.value); });
+    root.tabIndex = -1;
     root.addEventListener("keydown", ev => this.#onKey(ev));
+    // Escape (link mode) and Ctrl+Z also when focus fell back to the page: capture on the window, before Foundry's key bindings.
+    if (!this.#docKey) { this.#docKey = ev => this.#onDocKey(ev); window.addEventListener("keydown", this.#docKey, true); }
     // Foundry's Space key binding (pause) listens on the document: Space and Enter on our controls stay here.
     root.addEventListener("keyup", ev => { if (ev.key === " " || ev.key === "Enter") ev.stopPropagation(); });
     root.addEventListener("dragstart", ev => this.#onDragStart(ev));
@@ -150,7 +170,10 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
   }
 
   /** @param {any} options */
-  _onClose(options) { super._onClose(options); this.#sources = null; this.#classes = null; this.#labels.clear(); }
+  _onClose(options) {
+    super._onClose(options);
+    if (this.#docKey) { window.removeEventListener("keydown", this.#docKey, true); this.#docKey = null; }
+    this.#sources = null; this.#classes = null; this.#labels.clear(); }
 
   // ---------------------------------------------------------------- state helpers
   /** Applies an edit (a notice on refusal). @param {E.EditResult & { id?: string }} r @param {{ select?: string | null }} [o] */
@@ -262,8 +285,22 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
       /** @type {HTMLInputElement} */ (t).blur();
       return;
     }
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !typing) { ev.preventDefault(); ev.stopPropagation(); this.#undo(); }
-    if (ev.key === "Escape" && this.linkMode && !typing) { ev.stopPropagation(); this.linkMode = false; this.render(); }
+    // Escape and Ctrl+Z are handled by #onDocKey (window capture), which runs first for every key press.
+  }
+
+  /** Escape (leave link mode) and Ctrl+Z (undo), wherever focus is, unless typing or in another window. @param {KeyboardEvent} ev */
+  #onDocKey(ev) {
+    if (!this.rendered || !game.user?.isGM || !this.work) return;
+    if (/** @type {any} */ (this).minimized) return;
+    const t = /** @type {HTMLElement | null} */ (ev.target instanceof HTMLElement ? ev.target : null);
+    const inEditor = !!t && !!this.element?.contains(t);
+    const typing = !!t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable);
+    const otherWindow = !!t && !inEditor && !!t.closest?.(".application, .app, .window-app");
+    const a = E.keyAction({ key: ev.key, ctrl: ev.ctrlKey || ev.metaKey, linkMode: this.linkMode, inEditor, typing, otherWindow, canUndo: this.history.past.length > 0 });
+    if (!a) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
+    if (a === "undo") this.#undo();
+    else { this.linkMode = false; this.render(); }
   }
 
   /** @param {string} kind */
@@ -362,7 +399,11 @@ export class EditorWindow extends RememberedWindow(ApplicationV2, { moduleId: ID
     if (!self.work || self.busy) return;
     const tree = self.work; const pub = await self.#published();
     if (!pub) {
-      if (!(await confirm("Delete draft", `<p>Delete the draft <strong>${esc(tree.name)}</strong>? It was never published, so no character has it.</p>`))) return;
+      const held = rankHolders(tree.id);
+      const body = held.length
+        ? `<p>Delete the draft <strong>${esc(tree.name)}</strong>? It isn't in the tree compendium (never published, or removed there). ${held.length} ${held.length === 1 ? "character still has" : "characters still have"} points in it: Refund orphans (health check) clears them.</p>`
+        : `<p>Delete the draft <strong>${esc(tree.name)}</strong>? It isn't in the tree compendium, and no character has points in it.</p>`;
+      if (!(await confirm("Delete draft", body))) return;
       await Drafts.discard(tree.id); self.dirty = false; await self.#switchTo(null); return self.render();
     }
     const holders = rankHolders(tree.id);

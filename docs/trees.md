@@ -48,7 +48,7 @@ With no talent selected the inspector shows the **tree settings**: name, image, 
 - Edits stay in the window until **Save draft**, which keeps them in a GM-only journal in the hidden *Module data* folder (at most 50 drafts). Closing the editor or switching trees with unsaved changes asks first.
 - **Publish** checks the tree. Errors (talents that require each other, a tier the tiers below can't open, a document that no longer exists, a broken built slot) block it until fixed; warnings are shown and allowed. The confirm lists what changes, and names characters with ranks in talents you removed (those ranks become orphans: health check › Refund orphans). Publishing writes the tree and a readable *Talents* page into its Journal Entry in the tree compendium (a locked compendium is unlocked only if you agree, then locked again), and drops the draft. Players see the change at once.
 - **Discard draft** drops the draft and unsaved changes and goes back to the published tree (a never-published tree is deleted).
-- The title bar says *Unsaved changes*, *Draft differs from published* or *Draft, same as published*; a warning shows when the published tree changed since your draft started (publishing replaces it).
+- The title bar says *Unsaved changes*, *Draft differs from published* or *Draft, same as published*; *Draft · published tree changed* (hover for the full text) and a warning show when the published tree changed since your draft started (publishing replaces it).
 
 ## 3. Linking items and effects
 

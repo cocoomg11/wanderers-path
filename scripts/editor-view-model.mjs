@@ -18,7 +18,7 @@ import { MAX_COLUMNS, MAX_TIERS, MAX_TIER_SIZE, slotLabel, requires } from "./ed
  * @typedef {object} EditorFacts
  * @property {{ id: string, name: string, state: string, label: string, stale: boolean, published: boolean, draft: boolean }[]} list
  * @property {Tree | null} tree the working copy
- * @property {{ state: string, label: string, stale: boolean } | null} status
+ * @property {{ state: string, label: string, stale: boolean, tip?: string } | null} status
  * @property {boolean} dirty unsaved edits
  * @property {boolean} canUndo
  * @property {string | null} selected
@@ -107,10 +107,10 @@ function issuesHTML(f) {
 function mainHTML(f) {
   if (!f.tree) return `<main class="wp-ed-main"><div class="wp-empty">${ic("fa-route")}<p>Choose a tree on the left, or make a new one.</p><p class="wc-hint">${f.packName ? `Published trees go to ${esc(f.packName)}.` : "No tree compendium is chosen yet: Publish offers to make one."}</p></div></main>`;
   const t = f.tree; const tiered = t.layout === "tiered";
-  const status = f.dirty ? { label: "Unsaved changes", tone: TONE.unsaved } : { label: f.status?.label ?? "", tone: TONE[f.status?.state ?? ""] ?? "" };
+  const status = f.dirty ? { label: "Unsaved changes", tone: TONE.unsaved, tip: "" } : { label: f.status?.label ?? "", tone: TONE[f.status?.state ?? ""] ?? "", tip: f.status?.tip ?? "" };
   const canPublish = !f.busy && !!f.plan && !f.plan.errors.length;
   const bar = `<div class="wp-ed-bar">
-      <span class="wp-ed-title">${pic(t.img, "fa-route")}<b>${esc(t.name)}</b><small class="wc-badge ${status.tone}">${esc(status.label)}</small></span>
+      <span class="wp-ed-title">${pic(t.img, "fa-route")}<b>${esc(t.name)}</b><small class="wc-badge ${status.tone}" data-tooltip-text="${esc(status.tip || status.label)}">${esc(status.label)}</small></span>
       <span class="wp-ed-btns">
         ${tiered ? btn("addTier", "Tier", { icon: "fa-plus", small: true, tip: "Add a tier at the bottom" }) + btn("removeTier", "Tier", { icon: "fa-minus", small: true, tip: "Remove the last tier (it must be empty)", disabled: t.tiered.tiers <= 1 }) : ""}
         ${tiered ? btn("linkMode", "Link mode", { icon: "fa-link", small: true, pressed: f.linkMode, tip: "Select a talent, then click the talents it requires (click again to unlink)" }) : ""}

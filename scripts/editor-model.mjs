@@ -348,6 +348,38 @@ export function undoHistory(h) {
   return { tree: /** @type {Tree} */ (h.past.at(-1)), history: { past: h.past.slice(0, -1) } };
 }
 
+// ---------------------------------------------------------------- keys and focus
+/**
+ * What the editor does with a key press (0.6.2), wherever focus is: "escape" (leave link mode), "undo", or null (let it through).
+ * `inEditor` = the event target is inside the editor window; `typing` = the target is a text field (any window); `otherWindow` = the
+ * target is inside another window. Outside the editor (focus fell back to the page body after a redraw) the keys still reach us, but
+ * never from a field or another window. Escape outside link mode is left alone (Foundry's close-the-top-window stays).
+ * @param {{ key: string, ctrl?: boolean, linkMode?: boolean, inEditor?: boolean, typing?: boolean, otherWindow?: boolean, canUndo?: boolean }} k
+ * @returns {"escape" | "undo" | null}
+ */
+export function keyAction(k) {
+  if (k.typing || (!k.inEditor && k.otherWindow)) return null;
+  if (k.key === "Escape") return k.linkMode ? "escape" : null;
+  if (k.ctrl && String(k.key).toLowerCase() === "z") return k.inEditor || k.canUndo ? "undo" : null;
+  return null;
+}
+
+/** A selector quote (pure; ids are plain, but quotes and backslashes are escaped). @param {string} v */
+const q = v => `"${String(v).replace(/["\\]/g, "\\$&")}"`;
+
+/**
+ * A stable selector for the control that had focus before a redraw (0.6.2), from its data attributes and name; null when it has
+ * none worth finding again (the window itself is focused then).
+ * @param {{ action?: string, node?: string, cell?: string, wpSlot?: string, tree?: string, other?: string, kind?: string, ident?: string, name?: string }} d
+ */
+export function focusSelector(d = {}) {
+  if (d.name) return `[name=${q(d.name)}]`;
+  if (!d.action && d.cell == null && d.wpSlot == null) return null;
+  let s = d.action ? `[data-action=${q(d.action)}]` : "";
+  for (const [k, attr] of /** @type {const} */ ([["node", "data-node"], ["cell", "data-cell"], ["wpSlot", "data-wp-slot"], ["tree", "data-tree"], ["other", "data-other"], ["kind", "data-kind"], ["ident", "data-ident"]])) if (d[k] != null && d[k] !== "") s += `[${attr}=${q(d[k])}]`;
+  return s || null;
+}
+
 // ---------------------------------------------------------------- publish
 /**
  * Problems of a tree's built rank slots: [{ level, node, text }] (a bad spec, an item-only template on an effect talent).
