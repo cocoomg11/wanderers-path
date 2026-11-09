@@ -131,7 +131,7 @@ export function changeSummary(draft, published) {
 /**
  * The editor's tree list: every published tree and every draft, once each, sorted by name, with its state.
  * @param {Tree[]} published @param {DraftStore} store
- * @returns {{ id: string, name: string, state: string, label: string, stale: boolean, published: boolean, draft: boolean }[]}
+ * @returns {{ id: string, name: string, state: string, label: string, tip: string, stale: boolean, published: boolean, draft: boolean }[]}
  */
 export function treeList(published, store) {
   const s = normalizeDrafts(store);
@@ -140,7 +140,7 @@ export function treeList(published, store) {
   return [...ids].map(id => {
     const d = s.drafts[id] ?? null; const p = pub.get(id) ?? null;
     const st = draftState(d, p);
-    return { id, name: (d?.tree ?? p)?.name || id, state: st.state, label: st.label, stale: st.stale, published: !!p, draft: !!d };
+    return { id, name: (d?.tree ?? p)?.name || id, state: st.state, label: st.label, tip: st.tip ?? "", stale: st.stale, published: !!p, draft: !!d };
   }).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 

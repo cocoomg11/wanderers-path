@@ -16,7 +16,7 @@ import { MAX_COLUMNS, MAX_TIERS, MAX_TIER_SIZE, slotLabel, requires } from "./ed
 /** @typedef {import("./tree-model.mjs").TalentNode} TalentNode */
 /**
  * @typedef {object} EditorFacts
- * @property {{ id: string, name: string, state: string, label: string, stale: boolean, published: boolean, draft: boolean }[]} list
+ * @property {{ id: string, name: string, state: string, label: string, tip?: string, stale: boolean, published: boolean, draft: boolean }[]} list
  * @property {Tree | null} tree the working copy
  * @property {{ state: string, label: string, stale: boolean, tip?: string } | null} status
  * @property {boolean} dirty unsaved edits
@@ -58,7 +58,7 @@ const TONE = /** @type {Record<string, string>} */ ({ published: "wc-ok", same: 
 function leftHTML(f) {
   const cur = f.tree?.id ?? "";
   const rows = f.list.length ? f.list.map(t => `<li><button type="button" class="wp-ed-tree${t.id === cur ? " wp-on" : ""}" data-action="pickTree" data-tree="${esc(t.id)}" aria-pressed="${t.id === cur}">
-      <span>${esc(t.name)}</span><small class="wc-badge ${TONE[t.state] ?? ""}">${esc(t.state === "published" ? "Published" : t.state === "new" ? "Draft" : t.state === "same" ? "Draft (same)" : "Draft (changed)")}</small></button></li>`).join("")
+      <span>${esc(t.name)}</span><small class="wc-badge ${TONE[t.state] ?? ""}" data-tooltip-text="${esc(t.tip || t.label)}">${esc(t.state === "published" ? "Published" : t.state === "new" ? "Draft" : t.state === "same" ? "Draft (same)" : "Draft (changed)")}</small></button></li>`).join("")
     : `<li class="wc-hint">No trees yet: make one with New tree.</li>`;
   const docs = sourcesHTML(f);
   return `<aside class="wp-ed-left">

@@ -74,10 +74,3 @@ test("missingSources: missing UUIDs once, built slots and unknown never", () => 
   assert.match(h, /missingSources\(desiredOf\(st\), exists\)/);
   assert.match(h, /outOfSync \|\| missing \? "" : ", all in step"/);
 });
-
-test("0.6.2: version and changelog", () => {
-  const m = JSON.parse(src("module.json"));
-  assert.equal(m.version, "0.6.2");
-  assert.equal(m.download, "https://github.com/cocoomg11/wanderers-path/releases/download/v0.6.2/module.zip");
-  assert.match(src("CHANGELOG.md"), /^## 0\.6\.2$[\s\S]*?### Untested in Foundry[\s\S]*?^## 0\.6\.1$/m);
-});

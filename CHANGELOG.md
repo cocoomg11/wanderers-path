@@ -2,6 +2,18 @@
 
 All notable changes to Wanderer's Path. Versions follow the `version` in `module.json`.
 
+## 0.6.3
+
+Fix from live test 10.
+
+- **The Trees list's short badge explains itself.** In the tree editor's Trees list, hovering *Draft (changed)* for a draft whose published tree changed since it was started now shows the same sentence as the title bar's badge: "This draft differs from the published tree, and the published tree changed since the draft was started." The other badges (*Published*, *Draft*, *Draft (same)*, *Draft (changed)*) show their full label on hover. Link mode is unchanged.
+
+### Untested in Foundry
+
+- [ ] Start a draft, change the published tree from the console: in the Trees list, hovering *Draft (changed)* shows the full sentence, the same as the title bar's *Draft · published tree changed* badge.
+- [ ] A draft with changes but an unchanged published tree: hovering *Draft (changed)* shows "Draft differs from published"; *Published* and *Draft* rows show their labels.
+- [ ] Clicking a row still opens that tree (the tooltip doesn't get in the way).
+
 ## 0.6.2
 
 Fixes from the live test of 0.6.1.
